@@ -35,10 +35,8 @@ const (
 )
 
 var (
-	remoteExec = kingpin.Flag("remote-exec",
-		"Set to true when running inside Kubernetes cluster, false outside the cluster").Default("true").Envar("REMOTE_EXEC").Bool()
-	cronJob = kingpin.Flag("cron-job",
-		"Whether to run in loop (true) or run once like via cron (false)").Default("false").Envar("CRON_JOB").Bool()
+	runOnce = kingpin.Flag("run-once",
+		"Whether to run in loop (true) or run once like via cron (false)").Default("false").Envar("RUN_ONCE").Bool()
 	reapMax = kingpin.Flag("reap-max",
 		"Maximum Pods to reap in each run, set to 0 to disable this limit").Default("30").Envar("REAP_MAX").Int()
 	reapEvictedPods = kingpin.Flag("reap-evicted-pods",
@@ -103,14 +101,10 @@ func main() {
 		level.Debug(logger).Log("msg", "REAP_EVICTED_PODS not set. Not reaping evicted pods.")
 	}
 
-	if *remoteExec {
-		level.Debug(logger).Log("msg", "Loading kubeconfig from in cluster config")
+	if *kubeconfig == "" {
+		level.Info(logger).Log("msg", "Loading in cluster kubeconfig", "kubeconfig", *kubeconfig)
 		config, err = rest.InClusterConfig()
 	} else {
-		if *kubeconfig == "" {
-			level.Error(logger).Log("msg", "Must specify kubeconfig path")
-			os.Exit(1)
-		}
 		level.Info(logger).Log("msg", "Loading kubeconfig", "kubeconfig", *kubeconfig)
 		config, err = clientcmd.BuildConfigFromFlags("", *kubeconfig)
 	}
@@ -127,7 +121,7 @@ func main() {
 
 	for {
 		run(clientset, logger)
-		if *cronJob {
+		if *runOnce {
 			break
 		} else {
 			level.Debug(logger).Log("msg", "Sleeping...", "interval", fmt.Sprintf("%.0f", (*reapInterval).Seconds()))

@@ -31,13 +31,12 @@ The following flags and environment variables can modify the behavior of the job
 
 | Flag    | Environment Variable | Description |
 |---------|----------------------|-------------|
-|--no-remote-exec       | REMOTE_EXEC=false   | Set to run job-pod-reaper outside the Kubernetes cluster, requires kubeconfig be set |
-| --cron-job            | CRON_JOB=true       | Set to only execute reap code once and exit, used when run via cron   |
+| --run-once            | RUN_ONCE=true       | Set to only execute reap code once and exit, ie used when run via cron|
 | --reap-max=30         | REAP_MAX=30         | The maximum number of jobs to reap during each loop                   |
 | --reap-interval=60    | REAP_INTERVAL=60    | The number of seconds between each reaping execution when run in loop |
 | --reap-namespaces=all | REAP_NAMESPACES=all | Comma separated list of namespaces to reap                            |
 | --pods-labels         | PODS_LABELS         | Comma separated list of Pod labels to filter which pods to reap       |
 | --job-label=job       | JOB_LABEL=job       | The label associated to objects that represent a job to reap          |
-| --kubeconfig          | KUBECONFIG          | The path to Kubernetes config, only needed with --no-remote-exec      |
+| --kubeconfig          | KUBECONFIG          | The path to Kubernetes config, required when run outside Kubernetes   |
 | --log.level=info      | LOG_LEVEL=info      | The logging level One of: [debug, info, warn, error]                  |
 | --log.format=logfmt   | LOG_FORMAT=logfmt   | The logging format, either logfmt or json                             |
