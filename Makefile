@@ -2,10 +2,12 @@ GOPATH := $(shell go env GOPATH)
 GOLANGCI_LINT := $(GOPATH)/bin/golangci-lint
 GOLANGCI_LINT_VERSION := v1.33.0
 
+all: test build
+
 build:
 	GO111MODULE=on GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o job-pod-reaper main.go
 
-test: unused unit-test
+test: unused lint unit-test
 
 unit-test:
 	GO111MODULE=on GOOS=linux GOARCH=amd64 go test -race ./...
