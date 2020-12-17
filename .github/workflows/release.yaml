@@ -1,9 +1,11 @@
-name: Release main
+name: Release
 
 on:
   push:
     branches:
       - main
+    tags:
+      - '*'
 
 jobs:
   test:
@@ -15,7 +17,8 @@ jobs:
       with:
         username: ${{ secrets.DOCKER_HUB_USERNAME }}
         password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
-    - name: Build and push
+    - name: Build and push latest
+      if: ${{ github.ref == "refs/heads/main" }}
       id: docker_build
       uses: docker/build-push-action@v2
       with:
@@ -23,5 +26,14 @@ jobs:
         file: ./Dockerfile
         push: true
         tags: ohiosupercomputer/job-pod-reaper:latest
+    - name: Build and push tag ${{ github.event.ref }}
+      if: ${{ github.ref != "refs/heads/main" }}
+      id: docker_build
+      uses: docker/build-push-action@v2
+      with:
+        context: ./
+        file: ./Dockerfile
+        push: true
+        tags: ohiosupercomputer/job-pod-reaper:${{ github.event.ref }}
     - name: Image digest
       run: echo ${{ steps.docker_build.outputs.digest }}
