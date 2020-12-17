@@ -190,11 +190,10 @@ func GetJobs(clientset kubernetes.Interface, logger log.Logger) ([]Job, error) {
 				} else {
 					level.Debug(logger).Log("msg", "Pod does not have job label, skipping")
 				}
-				if pod.Status.StartTime == nil {
-					level.Debug(logger).Log("msg", "Pod does not have a StartTime, skipping")
-					continue
+				var currentLifetime time.Duration
+				if pod.Status.StartTime != nil {
+					currentLifetime = timeNow().Sub(pod.Status.StartTime.Time)
 				}
-				currentLifetime := timeNow().Sub(pod.Status.StartTime.Time)
 				level.Debug(logger).Log("msg", "Pod lifetime", "pod", pod.Name, "namespace", ns, "lifetime", currentLifetime.Seconds())
 				if currentLifetime > lifetime {
 					level.Debug(logger).Log("msg", "Pod is past its lifetime and will be killed.")
