@@ -9,6 +9,15 @@
 
 Kubernetes service that can reap pods that have run past their lifetime, or pods that have been evicted.
 
+This reaping is intended to be run against pods that act like short lived jobs.  Additional resources with the same `job` label as the expired pod will also be reaped.
+
+Current list of resources that can be reaped:
+
+* Pod
+* Service
+* ConfigMap
+* Secret
+
 ## Configuration
 
 To give a lifetime to your pods, add the following annotation:
