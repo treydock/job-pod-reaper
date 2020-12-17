@@ -216,7 +216,7 @@ func TestGetJobs(t *testing.T) {
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
 	}
-	jobs, err := GetJobs(clientset, namespaces, logger)
+	jobs, err := getJobs(clientset, namespaces, logger)
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
 	}
@@ -251,7 +251,7 @@ func TestGetJobsCase1(t *testing.T) {
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
 	}
-	jobs, err := GetJobs(clientset, namespaces, logger)
+	jobs, err := getJobs(clientset, namespaces, logger)
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
 	}
@@ -284,7 +284,7 @@ func TestGetJobsNamespaceLabels(t *testing.T) {
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
 	}
-	jobs, err := GetJobs(clientset, namespaces, logger)
+	jobs, err := getJobs(clientset, namespaces, logger)
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
 	}

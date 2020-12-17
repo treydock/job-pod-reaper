@@ -56,13 +56,13 @@ var (
 	timeNow = time.Now
 )
 
-type Job struct {
+type podJob struct {
 	jobID     string
 	podName   string
 	namespace string
 }
 
-type JobObject struct {
+type jobObject struct {
 	objectType string
 	jobID      string
 	name       string
@@ -136,17 +136,17 @@ func run(clientset kubernetes.Interface, logger log.Logger) {
 		level.Error(logger).Log("msg", "Error getting namespaces", "err", err)
 		return
 	}
-	jobs, err := GetJobs(clientset, namespaces, logger)
+	jobs, err := getJobs(clientset, namespaces, logger)
 	if err != nil {
 		level.Error(logger).Log("msg", "Error getting jods", "err", err)
 		return
 	}
-	jobObjects, err := GetJobObjects(clientset, jobs, logger)
+	jobObjects, err := getJobObjects(clientset, jobs, logger)
 	if err != nil {
 		level.Error(logger).Log("msg", "Error getting job objects", "err", err)
 		return
 	}
-	err = Reap(clientset, jobObjects, logger)
+	err = reap(clientset, jobObjects, logger)
 	if err != nil {
 		level.Error(logger).Log("msg", "Error reaping", "err", err)
 		return
@@ -182,9 +182,9 @@ func getNamespaces(clientset kubernetes.Interface, logger log.Logger) ([]string,
 	return namespaces, nil
 }
 
-func GetJobs(clientset kubernetes.Interface, namespaces []string, logger log.Logger) ([]Job, error) {
+func getJobs(clientset kubernetes.Interface, namespaces []string, logger log.Logger) ([]podJob, error) {
 	labels := strings.Split(*podsLabels, ",")
-	jobs := []Job{}
+	jobs := []podJob{}
 	toReap := 0
 	for _, ns := range namespaces {
 		for _, l := range labels {
@@ -228,11 +228,11 @@ func GetJobs(clientset kubernetes.Interface, namespaces []string, logger log.Log
 				level.Debug(podLogger).Log("msg", "Pod lifetime", "lifetime", currentLifetime.Seconds())
 				if currentLifetime > lifetime {
 					level.Debug(podLogger).Log("msg", "Pod is past its lifetime and will be killed.")
-					job := Job{jobID: jobID, podName: pod.Name, namespace: pod.Namespace}
+					job := podJob{jobID: jobID, podName: pod.Name, namespace: pod.Namespace}
 					jobs = append(jobs, job)
 				} else if *reapEvictedPods && strings.Contains(pod.Status.Reason, "Evicted") {
 					level.Debug(podLogger).Log("msg", "Pod is evicted and needs to be deleted.")
-					job := Job{jobID: jobID, podName: pod.Name, namespace: pod.Namespace}
+					job := podJob{jobID: jobID, podName: pod.Name, namespace: pod.Namespace}
 					jobs = append(jobs, job)
 				}
 			}
@@ -241,10 +241,10 @@ func GetJobs(clientset kubernetes.Interface, namespaces []string, logger log.Log
 	return jobs, nil
 }
 
-func GetJobObjects(clientset kubernetes.Interface, jobs []Job, logger log.Logger) ([]JobObject, error) {
-	jobObjects := []JobObject{}
+func getJobObjects(clientset kubernetes.Interface, jobs []podJob, logger log.Logger) ([]jobObject, error) {
+	jobObjects := []jobObject{}
 	for _, job := range jobs {
-		jobObjects = append(jobObjects, JobObject{objectType: "pod", name: job.podName, namespace: job.namespace})
+		jobObjects = append(jobObjects, jobObject{objectType: "pod", name: job.podName, namespace: job.namespace})
 		jobLogger := log.With(logger, "job", job.jobID, "namespace", job.namespace)
 		listOptions := metav1.ListOptions{
 			LabelSelector: fmt.Sprintf("%s=%s", *jobLabel, job.jobID),
@@ -255,7 +255,7 @@ func GetJobObjects(clientset kubernetes.Interface, jobs []Job, logger log.Logger
 			return nil, err
 		}
 		for _, service := range services.Items {
-			jobObject := JobObject{objectType: "service", name: service.Name, namespace: service.Namespace}
+			jobObject := jobObject{objectType: "service", name: service.Name, namespace: service.Namespace}
 			jobObjects = append(jobObjects, jobObject)
 		}
 		configmaps, err := clientset.CoreV1().ConfigMaps(job.namespace).List(context.TODO(), listOptions)
@@ -264,7 +264,7 @@ func GetJobObjects(clientset kubernetes.Interface, jobs []Job, logger log.Logger
 			return nil, err
 		}
 		for _, configmap := range configmaps.Items {
-			jobObject := JobObject{objectType: "configmap", name: configmap.Name, namespace: configmap.Namespace}
+			jobObject := jobObject{objectType: "configmap", name: configmap.Name, namespace: configmap.Namespace}
 			jobObjects = append(jobObjects, jobObject)
 		}
 		secrets, err := clientset.CoreV1().Secrets(job.namespace).List(context.TODO(), listOptions)
@@ -273,14 +273,14 @@ func GetJobObjects(clientset kubernetes.Interface, jobs []Job, logger log.Logger
 			return nil, err
 		}
 		for _, secret := range secrets.Items {
-			jobObject := JobObject{objectType: "secret", name: secret.Name, namespace: secret.Namespace}
+			jobObject := jobObject{objectType: "secret", name: secret.Name, namespace: secret.Namespace}
 			jobObjects = append(jobObjects, jobObject)
 		}
 	}
 	return jobObjects, nil
 }
 
-func Reap(clientset kubernetes.Interface, jobObjects []JobObject, logger log.Logger) error {
+func reap(clientset kubernetes.Interface, jobObjects []jobObject, logger log.Logger) error {
 	deletedPods := 0
 	deletedServices := 0
 	deletedConfigMaps := 0
