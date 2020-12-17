@@ -43,6 +43,7 @@ var (
 		"Whether or not to delete evicted pods").Default("true").Envar("REAP_EVICTED_PODS").Bool()
 	reapInterval    = kingpin.Flag("reap-interval", "Duration between repear runs").Default("60s").Envar("REAP_INTERLVAL").Duration()
 	reapNamespaces  = kingpin.Flag("reap-namespaces", "Namespaces to reap").Default("all").Envar("REAP_NAMESPACES").String()
+	namespaceLabels = kingpin.Flag("namespace-labels", "Labels to use when filtering namespaces").Default("").Envar("NAMESPACE_LABELS").String()
 	podsLabels      = kingpin.Flag("pods-labels", "Labels to use when filtering pods").Default("").Envar("PODS_LABELS").String()
 	jobLabel        = kingpin.Flag("job-label", "Label to associate pod job with other objects").Default("job").Envar("JOB_LABEL").String()
 	kubeconfig      = kingpin.Flag("kubeconfig", "Path to kubeconfig when running outside Kubernetes cluster").Default("").Envar("KUBECONFIG").String()
@@ -130,7 +131,12 @@ func main() {
 	}
 }
 func run(clientset kubernetes.Interface, logger log.Logger) {
-	jobs, err := GetJobs(clientset, logger)
+	namespaces, err := getNamespaces(clientset, logger)
+	if err != nil {
+		level.Error(logger).Log("msg", "Error getting namespaces", "err", err)
+		return
+	}
+	jobs, err := GetJobs(clientset, namespaces, logger)
 	if err != nil {
 		level.Error(logger).Log("msg", "Error getting jods", "err", err)
 		return
@@ -147,11 +153,36 @@ func run(clientset kubernetes.Interface, logger log.Logger) {
 	}
 }
 
-func GetJobs(clientset kubernetes.Interface, logger log.Logger) ([]Job, error) {
-	namespaces := strings.Split(*reapNamespaces, ",")
+func getNamespaces(clientset kubernetes.Interface, logger log.Logger) ([]string, error) {
+	var namespaces []string
+	namespaces = strings.Split(*reapNamespaces, ",")
 	if len(namespaces) == 1 && strings.ToLower(namespaces[0]) == "all" {
 		namespaces = []string{metav1.NamespaceAll}
 	}
+	if *namespaceLabels != "" {
+		namespaces = nil
+		nsLabels := strings.Split(*namespaceLabels, ",")
+		for _, label := range nsLabels {
+			nsListOptions := metav1.ListOptions{
+				LabelSelector: label,
+			}
+			level.Debug(logger).Log("msg", "Getting namespaces with label", "label", label)
+			ns, err := clientset.CoreV1().Namespaces().List(context.TODO(), nsListOptions)
+			if err != nil {
+				level.Error(logger).Log("msg", "Error getting namespace list", "label", label, "err", err)
+				return nil, err
+			}
+			level.Debug(logger).Log("msg", "Namespaces returned", "count", len(ns.Items))
+			for _, namespace := range ns.Items {
+				namespaces = append(namespaces, namespace.Name)
+			}
+		}
+
+	}
+	return namespaces, nil
+}
+
+func GetJobs(clientset kubernetes.Interface, namespaces []string, logger log.Logger) ([]Job, error) {
 	labels := strings.Split(*podsLabels, ",")
 	jobs := []Job{}
 	toReap := 0
@@ -170,37 +201,37 @@ func GetJobs(clientset kubernetes.Interface, logger log.Logger) ([]Job, error) {
 					level.Info(logger).Log("msg", "Max reap reached, skipping rest", "max", *reapMax)
 					return jobs, nil
 				}
-				logger = log.With(logger, "pod", pod.Name, "namespace", pod.Namespace)
+				podLogger := log.With(logger, "pod", pod.Name, "namespace", pod.Namespace)
 				var lifetime time.Duration
 				if val, ok := pod.Annotations[lifetimeAnnotation]; !ok {
-					level.Debug(logger).Log("msg", "Pod lacks reaper annotation, skipping", "annotation", lifetimeAnnotation)
+					level.Debug(podLogger).Log("msg", "Pod lacks reaper annotation, skipping", "annotation", lifetimeAnnotation)
 					continue
 				} else {
-					level.Debug(logger).Log("msg", "Found pod with reaper annotation", "annotation", val)
+					level.Debug(podLogger).Log("msg", "Found pod with reaper annotation", "annotation", val)
 					lifetime, err = time.ParseDuration(val)
 					if err != nil {
-						level.Error(logger).Log("msg", "Error parsing annotation, SKIPPING", "annotation", val, "err", err)
+						level.Error(podLogger).Log("msg", "Error parsing annotation, SKIPPING", "annotation", val, "err", err)
 						continue
 					}
 				}
 				var jobID string
 				if val, ok := pod.Labels[*jobLabel]; ok {
-					level.Debug(logger).Log("msg", "Pod has job label", "job", val)
+					level.Debug(podLogger).Log("msg", "Pod has job label", "job", val)
 					jobID = val
 				} else {
-					level.Debug(logger).Log("msg", "Pod does not have job label, skipping")
+					level.Debug(podLogger).Log("msg", "Pod does not have job label, skipping")
 				}
 				var currentLifetime time.Duration
 				if pod.Status.StartTime != nil {
 					currentLifetime = timeNow().Sub(pod.Status.StartTime.Time)
 				}
-				level.Debug(logger).Log("msg", "Pod lifetime", "pod", pod.Name, "namespace", ns, "lifetime", currentLifetime.Seconds())
+				level.Debug(podLogger).Log("msg", "Pod lifetime", "lifetime", currentLifetime.Seconds())
 				if currentLifetime > lifetime {
-					level.Debug(logger).Log("msg", "Pod is past its lifetime and will be killed.")
+					level.Debug(podLogger).Log("msg", "Pod is past its lifetime and will be killed.")
 					job := Job{jobID: jobID, podName: pod.Name, namespace: pod.Namespace}
 					jobs = append(jobs, job)
 				} else if *reapEvictedPods && strings.Contains(pod.Status.Reason, "Evicted") {
-					level.Debug(logger).Log("msg", "Pod is evicted and needs to be deleted.")
+					level.Debug(podLogger).Log("msg", "Pod is evicted and needs to be deleted.")
 					job := Job{jobID: jobID, podName: pod.Name, namespace: pod.Namespace}
 					jobs = append(jobs, job)
 				}
@@ -214,13 +245,13 @@ func GetJobObjects(clientset kubernetes.Interface, jobs []Job, logger log.Logger
 	jobObjects := []JobObject{}
 	for _, job := range jobs {
 		jobObjects = append(jobObjects, JobObject{objectType: "pod", name: job.podName, namespace: job.namespace})
-		logger = log.With(logger, "job", job.jobID, "namespace", job.namespace)
+		jobLogger := log.With(logger, "job", job.jobID, "namespace", job.namespace)
 		listOptions := metav1.ListOptions{
 			LabelSelector: fmt.Sprintf("%s=%s", *jobLabel, job.jobID),
 		}
 		services, err := clientset.CoreV1().Services(job.namespace).List(context.TODO(), listOptions)
 		if err != nil {
-			level.Error(logger).Log("msg", "Error getting services", "err", err)
+			level.Error(jobLogger).Log("msg", "Error getting services", "err", err)
 			return nil, err
 		}
 		for _, service := range services.Items {
@@ -229,7 +260,7 @@ func GetJobObjects(clientset kubernetes.Interface, jobs []Job, logger log.Logger
 		}
 		configmaps, err := clientset.CoreV1().ConfigMaps(job.namespace).List(context.TODO(), listOptions)
 		if err != nil {
-			level.Error(logger).Log("msg", "Error getting config maps", "err", err)
+			level.Error(jobLogger).Log("msg", "Error getting config maps", "err", err)
 			return nil, err
 		}
 		for _, configmap := range configmaps.Items {
@@ -238,7 +269,7 @@ func GetJobObjects(clientset kubernetes.Interface, jobs []Job, logger log.Logger
 		}
 		secrets, err := clientset.CoreV1().Secrets(job.namespace).List(context.TODO(), listOptions)
 		if err != nil {
-			level.Error(logger).Log("msg", "Error getting secrets", "err", err)
+			level.Error(jobLogger).Log("msg", "Error getting secrets", "err", err)
 			return nil, err
 		}
 		for _, secret := range secrets.Items {
@@ -255,41 +286,41 @@ func Reap(clientset kubernetes.Interface, jobObjects []JobObject, logger log.Log
 	deletedConfigMaps := 0
 	deletedSecrets := 0
 	for _, job := range jobObjects {
-		logger = log.With(logger, "job", job.jobID, "name", job.name, "namespace", job.namespace)
+		reapLogger := log.With(logger, "job", job.jobID, "name", job.name, "namespace", job.namespace)
 		if job.objectType == "pod" {
 			err := clientset.CoreV1().Pods(job.namespace).Delete(context.TODO(), job.name, metav1.DeleteOptions{})
 			if err != nil {
-				level.Error(logger).Log("msg", "Error deleting pod", "err", err)
+				level.Error(reapLogger).Log("msg", "Error deleting pod", "err", err)
 				continue
 			}
-			level.Info(logger).Log("msg", "Pod deleted")
+			level.Info(reapLogger).Log("msg", "Pod deleted")
 			deletedPods++
 		}
 		if job.objectType == "service" {
 			err := clientset.CoreV1().Services(job.namespace).Delete(context.TODO(), job.name, metav1.DeleteOptions{})
 			if err != nil {
-				level.Error(logger).Log("msg", "Error deleting service", "err", err)
+				level.Error(reapLogger).Log("msg", "Error deleting service", "err", err)
 				continue
 			}
-			level.Info(logger).Log("msg", "Service deleted")
+			level.Info(reapLogger).Log("msg", "Service deleted")
 			deletedServices++
 		}
 		if job.objectType == "configmap" {
 			err := clientset.CoreV1().ConfigMaps(job.namespace).Delete(context.TODO(), job.name, metav1.DeleteOptions{})
 			if err != nil {
-				level.Error(logger).Log("msg", "Error deleting config map", "err", err)
+				level.Error(reapLogger).Log("msg", "Error deleting config map", "err", err)
 				continue
 			}
-			level.Info(logger).Log("msg", "ConfigMap deleted")
+			level.Info(reapLogger).Log("msg", "ConfigMap deleted")
 			deletedConfigMaps++
 		}
 		if job.objectType == "secret" {
 			err := clientset.CoreV1().Secrets(job.namespace).Delete(context.TODO(), job.name, metav1.DeleteOptions{})
 			if err != nil {
-				level.Error(logger).Log("msg", "Error deleting secret", "err", err)
+				level.Error(reapLogger).Log("msg", "Error deleting secret", "err", err)
 				continue
 			}
-			level.Info(logger).Log("msg", "Secret deleted")
+			level.Info(reapLogger).Log("msg", "Secret deleted")
 			deletedSecrets++
 		}
 	}
