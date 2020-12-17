@@ -27,5 +27,4 @@ lint: $(GOLANGCI_LINT)
 
 $(GOLANGCI_LINT):
 	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh \
-		| sed -e '/BINDIR/d' \
 		| sh -s -- -b $(GOPATH)/bin $(GOLANGCI_LINT_VERSION)
