@@ -114,6 +114,10 @@ func main() {
 		level.Info(logger).Log("msg", "Loading kubeconfig", "kubeconfig", *kubeconfig)
 		config, err = clientcmd.BuildConfigFromFlags("", *kubeconfig)
 	}
+	if err != nil {
+		level.Error(logger).Log("msg", "Error loading kubeconfig", "err", err)
+		os.Exit(1)
+	}
 
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
