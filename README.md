@@ -44,6 +44,7 @@ The following flags and environment variables can modify the behavior of the job
 | --reap-max=30         | REAP_MAX=30         | The maximum number of jobs to reap during each loop                   |
 | --reap-interval=60    | REAP_INTERVAL=60    | The number of seconds between each reaping execution when run in loop |
 | --reap-namespaces=all | REAP_NAMESPACES=all | Comma separated list of namespaces to reap                            |
+| --namespace-labels    | NAMESPACE_LABELS    | The labels to use when filtering namespaces to search, overrides --reap-namespaces |
 | --pods-labels         | PODS_LABELS         | Comma separated list of Pod labels to filter which pods to reap       |
 | --job-label=job       | JOB_LABEL=job       | The label associated to objects that represent a job to reap          |
 | --kubeconfig          | KUBECONFIG          | The path to Kubernetes config, required when run outside Kubernetes   |
