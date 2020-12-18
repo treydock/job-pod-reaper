@@ -18,6 +18,10 @@ Current list of resources that can be reaped:
 * ConfigMap
 * Secret
 
+## Kubernetes support
+
+Currently this code is built and tested against Kubernetes 1.19.
+
 ## Install
 
 First install the necessary Namespace and RBAC resources:
@@ -38,7 +42,7 @@ A more generic deployment:
 kubectl apply -f https://raw.githubusercontent.com/OSC/job-pod-reaper/main/install/deployment.yaml
 ```
 
-If you wish to authorize the job-pod-reaper to reap only specific namespaces, those namespaces will need to have the following RoleBinding added (replace `$NAMESPACE` with namespace name).
+If you wish to authorize the job-pod-reaper to reap only specific namespaces, those namespaces will need to have the following RoleBinding added (replace `$NAMESPACE` with namespace name). Use this `RoleBinding` on namespaces listed with `--reap-namespaces` or if those namespaces match labels defined with `--namespace-labels`
 
 ```yaml
 apiVersion: rbac.authorization.k8s.io/v1
@@ -56,7 +60,7 @@ subjects:
   namespace: job-pod-reaper
 ```
 
-If you wish to authorize job-pod-reader for all namespaces:
+If you wish to authorize job-pod-reader for all namespaces the following `ClusterRoleBinding` is required.  This would be needed if `--namespace-labels` is not defined and you set `--reap-namespaces=ALL`.
 
 ```yaml
 apiVersion: rbac.authorization.k8s.io/v1
