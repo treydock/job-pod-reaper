@@ -22,11 +22,12 @@ spec:
         - --reap-max=30
         - --reap-evicted-pods
         - --reap-interval=60s
+        - --reap-timestamp=start
         - --namespace-labels=app.kubernetes.io/name=open-ondemand
         - --pods-labels=app.kubernetes.io/managed-by=open-ondemand
         - --job-label=job
-        - --log.level=debug
-        - --log.format=logfmt
+        - --log-level=debug
+        - --log-format=logfmt
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:
