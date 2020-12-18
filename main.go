@@ -41,15 +41,17 @@ var (
 		"Maximum Pods to reap in each run, set to 0 to disable this limit").Default("30").Envar("REAP_MAX").Int()
 	reapEvictedPods = kingpin.Flag("reap-evicted-pods",
 		"Whether or not to delete evicted pods").Default("true").Envar("REAP_EVICTED_PODS").Bool()
-	reapInterval    = kingpin.Flag("reap-interval", "Duration between repear runs").Default("60s").Envar("REAP_INTERLVAL").Duration()
-	reapNamespaces  = kingpin.Flag("reap-namespaces", "Namespaces to reap").Default("all").Envar("REAP_NAMESPACES").String()
-	namespaceLabels = kingpin.Flag("namespace-labels", "Labels to use when filtering namespaces").Default("").Envar("NAMESPACE_LABELS").String()
-	podsLabels      = kingpin.Flag("pods-labels", "Labels to use when filtering pods").Default("").Envar("PODS_LABELS").String()
-	jobLabel        = kingpin.Flag("job-label", "Label to associate pod job with other objects").Default("job").Envar("JOB_LABEL").String()
-	kubeconfig      = kingpin.Flag("kubeconfig", "Path to kubeconfig when running outside Kubernetes cluster").Default("").Envar("KUBECONFIG").String()
-	logLevel        = kingpin.Flag("log.level", "Log level, One of: [debug, info, warn, error]").Default("info").Envar("LOG_LEVEL").String()
-	logFormat       = kingpin.Flag("log.format", "Log format, One of: [logfmt, json]").Default("logfmt").Envar("LOG_FORMAT").String()
-	timestampFormat = log.TimestampFormat(
+	reapInterval       = kingpin.Flag("reap-interval", "Duration between repear runs").Default("60s").Envar("REAP_INTERLVAL").Duration()
+	reapNamespaces     = kingpin.Flag("reap-namespaces", "Namespaces to reap").Default("all").Envar("REAP_NAMESPACES").String()
+	reapTimestamp      = kingpin.Flag("reap-timestamp", "The Pod timestamp evaluate for reaping, One of: [start, creation]").Default("start").Envar("REAP_TIMESTAMP").String()
+	reapTimestampValid = []string{"start", "creation"}
+	namespaceLabels    = kingpin.Flag("namespace-labels", "Labels to use when filtering namespaces").Default("").Envar("NAMESPACE_LABELS").String()
+	podsLabels         = kingpin.Flag("pods-labels", "Labels to use when filtering pods").Default("").Envar("PODS_LABELS").String()
+	jobLabel           = kingpin.Flag("job-label", "Label to associate pod job with other objects").Default("job").Envar("JOB_LABEL").String()
+	kubeconfig         = kingpin.Flag("kubeconfig", "Path to kubeconfig when running outside Kubernetes cluster").Default("").Envar("KUBECONFIG").String()
+	logLevel           = kingpin.Flag("log-level", "Log level, One of: [debug, info, warn, error]").Default("info").Envar("LOG_LEVEL").String()
+	logFormat          = kingpin.Flag("log-format", "Log format, One of: [logfmt, json]").Default("logfmt").Envar("LOG_FORMAT").String()
+	timestampFormat    = log.TimestampFormat(
 		func() time.Time { return time.Now().UTC() },
 		"2006-01-02T15:04:05.000Z07:00",
 	)
@@ -94,6 +96,11 @@ func main() {
 		os.Exit(1)
 	}
 	logger = log.With(logger, "ts", timestampFormat, "caller", log.DefaultCaller)
+
+	if !sliceContains(reapTimestampValid, *reapTimestamp) {
+		level.Error(logger).Log("msg", "Unrecognized reap-timestamp", "value", *reapTimestamp)
+		os.Exit(1)
+	}
 
 	var config *rest.Config
 	var err error
@@ -222,8 +229,10 @@ func getJobs(clientset kubernetes.Interface, namespaces []string, logger log.Log
 					level.Debug(podLogger).Log("msg", "Pod does not have job label, skipping")
 				}
 				var currentLifetime time.Duration
-				if pod.Status.StartTime != nil {
+				if *reapTimestamp == "start" && pod.Status.StartTime != nil {
 					currentLifetime = timeNow().Sub(pod.Status.StartTime.Time)
+				} else if *reapTimestamp == "creation" {
+					currentLifetime = timeNow().Sub(pod.CreationTimestamp.Time)
 				}
 				level.Debug(podLogger).Log("msg", "Pod lifetime", "lifetime", currentLifetime.Seconds())
 				if currentLifetime > lifetime {
@@ -327,4 +336,13 @@ func reap(clientset kubernetes.Interface, jobObjects []jobObject, logger log.Log
 	level.Info(logger).Log("msg", "Reap summary",
 		"pods", deletedPods, "services", deletedServices, "configmaps", deletedConfigMaps, "secrets", deletedSecrets)
 	return nil
+}
+
+func sliceContains(slice []string, str string) bool {
+	for _, s := range slice {
+		if str == s {
+			return true
+		}
+	}
+	return false
 }

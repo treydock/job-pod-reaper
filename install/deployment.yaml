@@ -23,9 +23,10 @@ spec:
         - --reap-evicted-pods
         - --reap-interval=60s
         - --reap-namespaces=all
+        - --reap-timestamp=start
         - --job-label=job
-        - --log.level=debug
-        - --log.format=logfmt
+        - --log-level=debug
+        - --log-format=logfmt
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:
