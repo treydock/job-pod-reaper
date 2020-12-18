@@ -27,19 +27,19 @@ Currently this code is built and tested against Kubernetes 1.19.
 First install the necessary Namespace and RBAC resources:
 
 ```
-kubectl apply -f https://raw.githubusercontent.com/OSC/job-pod-reaper/main/install/namespace-rbac.yaml
+kubectl apply -f https://github.com/OSC/job-pod-reaper/releases/latest/download/namespace-rbac.yaml
 ```
 
 For Open OnDemand a deployment can be installed using Open OnDemand specific deployment:
 
 ```
-kubectl apply -f https://raw.githubusercontent.com/OSC/job-pod-reaper/main/install/ondemand-deployment.yaml
+kubectl apply -f https://github.com/OSC/job-pod-reaper/releases/latest/download/ondemand-deployment.yaml
 ```
 
 A more generic deployment:
 
 ```
-kubectl apply -f https://raw.githubusercontent.com/OSC/job-pod-reaper/main/install/deployment.yaml
+kubectl apply -f https://github.com/OSC/job-pod-reaper/releases/latest/download/deployment.yaml
 ```
 
 If you wish to authorize the job-pod-reaper to reap only specific namespaces, those namespaces will need to have the following RoleBinding added (replace `$NAMESPACE` with namespace name). Use this `RoleBinding` on namespaces listed with `--reap-namespaces` or if those namespaces match labels defined with `--namespace-labels`
