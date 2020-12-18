@@ -16,7 +16,7 @@ spec:
       serviceAccountName: job-pod-reaper
       containers:
       - name: ondemand-job-pod-reaper
-        image: docker.io/ohiosupercomputer/job-pod-reaper:v0.1.0
+        image: docker.io/ohiosupercomputer/job-pod-reaper:latest
         imagePullPolicy: Always
         args:
         - --reap-max=30
