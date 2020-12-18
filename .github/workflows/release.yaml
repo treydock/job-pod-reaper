@@ -32,7 +32,7 @@ jobs:
           go-version: '1.15'
       - name: Package
         id: package
-        run: echo "::set-output name=package::$(make release VERSION=${{ needs.set-output.outputs.version }} | grep tar.gz)"
+        run: echo "::set-output name=package::$(make release TAG=${{ needs.set-output.outputs.tag }} | grep tar.gz)"
       - name: Upload artifacts
         uses: actions/upload-artifact@v2
         with:

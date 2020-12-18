@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     name: Release Docker
     steps:
-      - name: Set version
+      - name: Set tag
         id: tag
         run: echo ::set-output name=tag::${GITHUB_REF#refs/*/}
       - uses: actions/checkout@v2

@@ -4,6 +4,7 @@ GOARCH := amd64
 GOLANGCI_LINT := $(GOPATH)/bin/golangci-lint
 GOLANGCI_LINT_VERSION := v1.33.0
 VERSION ?= $(shell git rev-parse --abbrev-ref HEAD)
+TAG ?= latest
 
 all: unused lint test
 
@@ -31,10 +32,10 @@ $(GOLANGCI_LINT):
 		| sh -s -- -b $(GOPATH)/bin $(GOLANGCI_LINT_VERSION)
 
 release: build
-	@tar -czf job-pod-reaper-$(VERSION).$(GOOS)-$(GOARCH).tar.gz job-pod-reaper
-	@echo job-pod-reaper-$(VERSION).$(GOOS)-$(GOARCH).tar.gz
-	@sed -i 's/:latest/:$(VERSION)/g' install/deployment.yaml
-	@sed -i 's/:latest/:$(VERSION)/g' install/ondemand-deployment.yaml
+	@tar -czf job-pod-reaper-$(TAG).$(GOOS)-$(GOARCH).tar.gz job-pod-reaper
+	@echo job-pod-reaper-$(TAG).$(GOOS)-$(GOARCH).tar.gz
+	@sed -i 's/:latest/:$(TAG)/g' install/deployment.yaml
+	@sed -i 's/:latest/:$(TAG)/g' install/ondemand-deployment.yaml
 
 release-notes:
 	@bash -c 'while IFS= read -r line; do if [[ "$$line" == "## "* && "$$line" != "## $(VERSION) "* ]]; then break ; fi; echo "$$line"; done < "CHANGELOG.md"' \
