@@ -18,6 +18,66 @@ Current list of resources that can be reaped:
 * ConfigMap
 * Secret
 
+## Kubernetes support
+
+Currently this code is built and tested against Kubernetes 1.19.
+
+## Install
+
+First install the necessary Namespace and RBAC resources:
+
+```
+kubectl apply -f https://raw.githubusercontent.com/OSC/job-pod-reaper/main/install/namespace-rbac.yaml
+```
+
+For Open OnDemand a deployment can be installed using Open OnDemand specific deployment:
+
+```
+kubectl apply -f https://raw.githubusercontent.com/OSC/job-pod-reaper/main/install/ondemand-deployment.yaml
+```
+
+A more generic deployment:
+
+```
+kubectl apply -f https://raw.githubusercontent.com/OSC/job-pod-reaper/main/install/deployment.yaml
+```
+
+If you wish to authorize the job-pod-reaper to reap only specific namespaces, those namespaces will need to have the following RoleBinding added (replace `$NAMESPACE` with namespace name). Use this `RoleBinding` on namespaces listed with `--reap-namespaces` or if those namespaces match labels defined with `--namespace-labels`
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: $NAMESPACE-job-pod-reaper-rolebinding
+  namespace: $NAMESPACE
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: job-pod-reaper
+subjects:
+- kind: ServiceAccount
+  name: job-pod-reaper
+  namespace: job-pod-reaper
+```
+
+If you wish to authorize job-pod-reader for all namespaces the following `ClusterRoleBinding` is required.  This would be needed if `--namespace-labels` is not defined and you set `--reap-namespaces=ALL`.
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: job-pod-reaper
+  namespace: job-pod-reaper
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: job-pod-reaper
+subjects:
+- kind: ServiceAccount
+  name: job-pod-reaper
+  namespace: job-pod-reaper
+```
+
 ## Configuration
 
 To give a lifetime to your pods, add the following annotation:

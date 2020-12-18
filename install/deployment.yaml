@@ -1,0 +1,45 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: job-pod-reaper
+  namespace: job-pod-reaper
+spec:
+  selector:
+    matchLabels:
+      app: job-pod-reaper
+  template:
+    metadata:
+      labels:
+        app: job-pod-reaper
+    spec:
+      serviceAccountName: job-pod-reaper
+      containers:
+      - name: job-pod-reaper
+        image: docker.io/ohiosupercomputer/job-pod-reaper:v0.1.0
+        imagePullPolicy: Always
+        args:
+        - --reap-max=30
+        - --reap-evicted-pods
+        - --reap-interval=60s
+        - --reap-namespaces=all
+        - --job-label=job
+        - --log.level=debug
+        - --log.format=logfmt
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - all
+          privileged: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 65534
+        resources:
+          limits:
+            memory: 128Mi
+          requests:
+            cpu: 100m
+            memory: 50Mi
+      nodeSelector:
+        kubernetes.io/os: linux
