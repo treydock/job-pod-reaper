@@ -6,7 +6,7 @@ GOLANGCI_LINT_VERSION := v1.33.0
 VERSION ?= $(shell git rev-parse --abbrev-ref HEAD)
 TAG ?= latest
 
-all: unused lint test
+all: unused lint style test
 
 build:
 	GO111MODULE=on GOOS=$(GOOS) GOARCH=$(GOARCH) CGO_ENABLED=0 go build -o job-pod-reaper main.go
@@ -26,6 +26,18 @@ lint: $(GOLANGCI_LINT)
 	@echo ">> running golangci-lint"
 	GO111MODULE=on GOOS=$(GOOS) GOARCH=$(GOARCH) go list -e -compiled -test=true -export=false -deps=true -find=false -tags= -- ./... > /dev/null
 	GO111MODULE=on GOOS=$(GOOS) GOARCH=$(GOARCH) $(GOLANGCI_LINT) run ./...
+
+style:
+	@echo ">> checking code style"
+	@fmtRes=$$(gofmt -d $$(find . -path ./vendor -prune -o -name '*.go' -print)); \
+	if [ -n "$${fmtRes}" ]; then \
+		echo "gofmt checking failed!"; echo "$${fmtRes}"; echo; \
+		echo "Please ensure you are using $$($(GO) version) for formatting code."; \
+		exit 1; \
+	fi
+
+format:
+	go fmt ./...
 
 $(GOLANGCI_LINT):
 	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh \

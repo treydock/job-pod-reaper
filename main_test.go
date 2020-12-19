@@ -48,13 +48,6 @@ var (
 				"app.kubernetes.io/name": "foo",
 			},
 		},
-	}, &v1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "user-user3",
-			Labels: map[string]string{
-				"app.kubernetes.io/name": "open-ondemand-test",
-			},
-		},
 	}, &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        "non-job-pod",
@@ -73,9 +66,7 @@ var (
 				"job":                          "1",
 				"app.kubernetes.io/managed-by": "open-ondemand",
 			},
-		},
-		Status: v1.PodStatus{
-			StartTime: &podStartTime,
+			CreationTimestamp: podStartTime,
 		},
 	}, &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -88,24 +79,7 @@ var (
 				"job":                          "2",
 				"app.kubernetes.io/managed-by": "open-ondemand",
 			},
-		},
-		Status: v1.PodStatus{
-			StartTime: &podStartTime,
-		},
-	}, &v1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "ondemand-job3",
-			Namespace: "user-user3",
-			Annotations: map[string]string{
-				"pod.kubernetes.io/lifetime": "30m",
-			},
-			Labels: map[string]string{
-				"job":                          "3",
-				"app.kubernetes.io/managed-by": "open-ondemand",
-			},
-		},
-		Status: v1.PodStatus{
-			StartTime: nil,
+			CreationTimestamp: podStartTime,
 		},
 	}, &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -318,7 +292,7 @@ func TestRun(t *testing.T) {
 	if err != nil {
 		t.Errorf("Unexpected error getting pods: %v", err)
 	}
-	if len(pods.Items) != 2 {
+	if len(pods.Items) != 1 {
 		t.Errorf("Unexpected number of pods, got: %d", len(pods.Items))
 	}
 	services, err := clientset.CoreV1().Services(metav1.NamespaceAll).List(context.TODO(), metav1.ListOptions{})

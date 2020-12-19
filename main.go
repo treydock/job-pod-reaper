@@ -39,19 +39,15 @@ var (
 		"Whether to run in loop (true) or run once like via cron (false)").Default("false").Envar("RUN_ONCE").Bool()
 	reapMax = kingpin.Flag("reap-max",
 		"Maximum Pods to reap in each run, set to 0 to disable this limit").Default("30").Envar("REAP_MAX").Int()
-	reapEvictedPods = kingpin.Flag("reap-evicted-pods",
-		"Whether or not to delete evicted pods").Default("true").Envar("REAP_EVICTED_PODS").Bool()
-	reapInterval       = kingpin.Flag("reap-interval", "Duration between repear runs").Default("60s").Envar("REAP_INTERLVAL").Duration()
-	reapNamespaces     = kingpin.Flag("reap-namespaces", "Namespaces to reap").Default("all").Envar("REAP_NAMESPACES").String()
-	reapTimestamp      = kingpin.Flag("reap-timestamp", "The Pod timestamp evaluate for reaping, One of: [start, creation]").Default("start").Envar("REAP_TIMESTAMP").String()
-	reapTimestampValid = []string{"start", "creation"}
-	namespaceLabels    = kingpin.Flag("namespace-labels", "Labels to use when filtering namespaces").Default("").Envar("NAMESPACE_LABELS").String()
-	podsLabels         = kingpin.Flag("pods-labels", "Labels to use when filtering pods").Default("").Envar("PODS_LABELS").String()
-	jobLabel           = kingpin.Flag("job-label", "Label to associate pod job with other objects").Default("job").Envar("JOB_LABEL").String()
-	kubeconfig         = kingpin.Flag("kubeconfig", "Path to kubeconfig when running outside Kubernetes cluster").Default("").Envar("KUBECONFIG").String()
-	logLevel           = kingpin.Flag("log-level", "Log level, One of: [debug, info, warn, error]").Default("info").Envar("LOG_LEVEL").String()
-	logFormat          = kingpin.Flag("log-format", "Log format, One of: [logfmt, json]").Default("logfmt").Envar("LOG_FORMAT").String()
-	timestampFormat    = log.TimestampFormat(
+	reapInterval    = kingpin.Flag("reap-interval", "Duration between repear runs").Default("60s").Envar("REAP_INTERLVAL").Duration()
+	reapNamespaces  = kingpin.Flag("reap-namespaces", "Namespaces to reap").Default("all").Envar("REAP_NAMESPACES").String()
+	namespaceLabels = kingpin.Flag("namespace-labels", "Labels to use when filtering namespaces").Default("").Envar("NAMESPACE_LABELS").String()
+	podsLabels      = kingpin.Flag("pods-labels", "Labels to use when filtering pods").Default("").Envar("PODS_LABELS").String()
+	jobLabel        = kingpin.Flag("job-label", "Label to associate pod job with other objects").Default("job").Envar("JOB_LABEL").String()
+	kubeconfig      = kingpin.Flag("kubeconfig", "Path to kubeconfig when running outside Kubernetes cluster").Default("").Envar("KUBECONFIG").String()
+	logLevel        = kingpin.Flag("log-level", "Log level, One of: [debug, info, warn, error]").Default("info").Envar("LOG_LEVEL").String()
+	logFormat       = kingpin.Flag("log-format", "Log format, One of: [logfmt, json]").Default("logfmt").Envar("LOG_FORMAT").String()
+	timestampFormat = log.TimestampFormat(
 		func() time.Time { return time.Now().UTC() },
 		"2006-01-02T15:04:05.000Z07:00",
 	)
@@ -97,17 +93,8 @@ func main() {
 	}
 	logger = log.With(logger, "ts", timestampFormat, "caller", log.DefaultCaller)
 
-	if !sliceContains(reapTimestampValid, *reapTimestamp) {
-		level.Error(logger).Log("msg", "Unrecognized reap-timestamp", "value", *reapTimestamp)
-		os.Exit(1)
-	}
-
 	var config *rest.Config
 	var err error
-
-	if !*reapEvictedPods {
-		level.Debug(logger).Log("msg", "REAP_EVICTED_PODS not set. Not reaping evicted pods.")
-	}
 
 	if *kubeconfig == "" {
 		level.Info(logger).Log("msg", "Loading in cluster kubeconfig", "kubeconfig", *kubeconfig)
@@ -153,11 +140,7 @@ func run(clientset kubernetes.Interface, logger log.Logger) {
 		level.Error(logger).Log("msg", "Error getting job objects", "err", err)
 		return
 	}
-	err = reap(clientset, jobObjects, logger)
-	if err != nil {
-		level.Error(logger).Log("msg", "Error reaping", "err", err)
-		return
-	}
+	reap(clientset, jobObjects, logger)
 }
 
 func getNamespaces(clientset kubernetes.Interface, logger log.Logger) ([]string, error) {
@@ -227,20 +210,12 @@ func getJobs(clientset kubernetes.Interface, namespaces []string, logger log.Log
 					jobID = val
 				} else {
 					level.Debug(podLogger).Log("msg", "Pod does not have job label, skipping")
+					continue
 				}
-				var currentLifetime time.Duration
-				if *reapTimestamp == "start" && pod.Status.StartTime != nil {
-					currentLifetime = timeNow().Sub(pod.Status.StartTime.Time)
-				} else if *reapTimestamp == "creation" {
-					currentLifetime = timeNow().Sub(pod.CreationTimestamp.Time)
-				}
+				currentLifetime := timeNow().Sub(pod.CreationTimestamp.Time)
 				level.Debug(podLogger).Log("msg", "Pod lifetime", "lifetime", currentLifetime.Seconds())
 				if currentLifetime > lifetime {
 					level.Debug(podLogger).Log("msg", "Pod is past its lifetime and will be killed.")
-					job := podJob{jobID: jobID, podName: pod.Name, namespace: pod.Namespace}
-					jobs = append(jobs, job)
-				} else if *reapEvictedPods && strings.Contains(pod.Status.Reason, "Evicted") {
-					level.Debug(podLogger).Log("msg", "Pod is evicted and needs to be deleted.")
 					job := podJob{jobID: jobID, podName: pod.Name, namespace: pod.Namespace}
 					jobs = append(jobs, job)
 				}
@@ -289,14 +264,15 @@ func getJobObjects(clientset kubernetes.Interface, jobs []podJob, logger log.Log
 	return jobObjects, nil
 }
 
-func reap(clientset kubernetes.Interface, jobObjects []jobObject, logger log.Logger) error {
+func reap(clientset kubernetes.Interface, jobObjects []jobObject, logger log.Logger) {
 	deletedPods := 0
 	deletedServices := 0
 	deletedConfigMaps := 0
 	deletedSecrets := 0
 	for _, job := range jobObjects {
 		reapLogger := log.With(logger, "job", job.jobID, "name", job.name, "namespace", job.namespace)
-		if job.objectType == "pod" {
+		switch job.objectType {
+		case "pod":
 			err := clientset.CoreV1().Pods(job.namespace).Delete(context.TODO(), job.name, metav1.DeleteOptions{})
 			if err != nil {
 				level.Error(reapLogger).Log("msg", "Error deleting pod", "err", err)
@@ -304,8 +280,7 @@ func reap(clientset kubernetes.Interface, jobObjects []jobObject, logger log.Log
 			}
 			level.Info(reapLogger).Log("msg", "Pod deleted")
 			deletedPods++
-		}
-		if job.objectType == "service" {
+		case "service":
 			err := clientset.CoreV1().Services(job.namespace).Delete(context.TODO(), job.name, metav1.DeleteOptions{})
 			if err != nil {
 				level.Error(reapLogger).Log("msg", "Error deleting service", "err", err)
@@ -313,8 +288,7 @@ func reap(clientset kubernetes.Interface, jobObjects []jobObject, logger log.Log
 			}
 			level.Info(reapLogger).Log("msg", "Service deleted")
 			deletedServices++
-		}
-		if job.objectType == "configmap" {
+		case "configmap":
 			err := clientset.CoreV1().ConfigMaps(job.namespace).Delete(context.TODO(), job.name, metav1.DeleteOptions{})
 			if err != nil {
 				level.Error(reapLogger).Log("msg", "Error deleting config map", "err", err)
@@ -322,8 +296,7 @@ func reap(clientset kubernetes.Interface, jobObjects []jobObject, logger log.Log
 			}
 			level.Info(reapLogger).Log("msg", "ConfigMap deleted")
 			deletedConfigMaps++
-		}
-		if job.objectType == "secret" {
+		case "secret":
 			err := clientset.CoreV1().Secrets(job.namespace).Delete(context.TODO(), job.name, metav1.DeleteOptions{})
 			if err != nil {
 				level.Error(reapLogger).Log("msg", "Error deleting secret", "err", err)
@@ -335,14 +308,4 @@ func reap(clientset kubernetes.Interface, jobObjects []jobObject, logger log.Log
 	}
 	level.Info(logger).Log("msg", "Reap summary",
 		"pods", deletedPods, "services", deletedServices, "configmaps", deletedConfigMaps, "secrets", deletedSecrets)
-	return nil
-}
-
-func sliceContains(slice []string, str string) bool {
-	for _, s := range slice {
-		if str == s {
-			return true
-		}
-	}
-	return false
 }
