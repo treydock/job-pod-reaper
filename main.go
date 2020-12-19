@@ -228,7 +228,7 @@ func getJobs(clientset kubernetes.Interface, namespaces []string, logger log.Log
 func getJobObjects(clientset kubernetes.Interface, jobs []podJob, logger log.Logger) ([]jobObject, error) {
 	jobObjects := []jobObject{}
 	for _, job := range jobs {
-		jobObjects = append(jobObjects, jobObject{objectType: "pod", name: job.podName, namespace: job.namespace})
+		jobObjects = append(jobObjects, jobObject{objectType: "pod", jobID: job.jobID, name: job.podName, namespace: job.namespace})
 		jobLogger := log.With(logger, "job", job.jobID, "namespace", job.namespace)
 		listOptions := metav1.ListOptions{
 			LabelSelector: fmt.Sprintf("%s=%s", *jobLabel, job.jobID),
@@ -239,7 +239,7 @@ func getJobObjects(clientset kubernetes.Interface, jobs []podJob, logger log.Log
 			return nil, err
 		}
 		for _, service := range services.Items {
-			jobObject := jobObject{objectType: "service", name: service.Name, namespace: service.Namespace}
+			jobObject := jobObject{objectType: "service", jobID: job.jobID, name: service.Name, namespace: service.Namespace}
 			jobObjects = append(jobObjects, jobObject)
 		}
 		configmaps, err := clientset.CoreV1().ConfigMaps(job.namespace).List(context.TODO(), listOptions)
@@ -248,7 +248,7 @@ func getJobObjects(clientset kubernetes.Interface, jobs []podJob, logger log.Log
 			return nil, err
 		}
 		for _, configmap := range configmaps.Items {
-			jobObject := jobObject{objectType: "configmap", name: configmap.Name, namespace: configmap.Namespace}
+			jobObject := jobObject{objectType: "configmap", jobID: job.jobID, name: configmap.Name, namespace: configmap.Namespace}
 			jobObjects = append(jobObjects, jobObject)
 		}
 		secrets, err := clientset.CoreV1().Secrets(job.namespace).List(context.TODO(), listOptions)
@@ -257,7 +257,7 @@ func getJobObjects(clientset kubernetes.Interface, jobs []podJob, logger log.Log
 			return nil, err
 		}
 		for _, secret := range secrets.Items {
-			jobObject := jobObject{objectType: "secret", name: secret.Name, namespace: secret.Namespace}
+			jobObject := jobObject{objectType: "secret", jobID: job.jobID, name: secret.Name, namespace: secret.Namespace}
 			jobObjects = append(jobObjects, jobObject)
 		}
 	}
