@@ -10,15 +10,10 @@ jobs:
     name: Set Output
     runs-on: ubuntu-latest
     steps:
-      - run: echo $GITHUB_REF
-      - name: Set tag
-        id: tag
-        run: echo ::set-output name=tag::${GITHUB_REF#refs/*/}
       - name: Set version
         id: version
-        run: echo ::set-output name=version::${GITHUB_REF#refs/*/v}
+        run: echo ::set-output name=version::${GITHUB_REF#refs/*/}
     outputs:
-      tag: ${{ steps.tag.outputs.tag }}
       version: ${{ steps.version.outputs.version }}
   build-release:
     needs: set-output
@@ -32,7 +27,10 @@ jobs:
           go-version: '1.15'
       - name: Package
         id: package
-        run: echo "::set-output name=package::$(make release TAG=${{ needs.set-output.outputs.tag }} | grep tar.gz)"
+        env:
+          VERSION: ${{ needs.set-output.outputs.version }}
+          DOCKERTAG: ${{ needs.set-output.outputs.version }}
+        run: echo "::set-output name=package::$(make release | grep tar.gz)"
       - name: Upload artifacts
         uses: actions/upload-artifact@v2
         with:
@@ -60,11 +58,11 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ needs.set-output.outputs.tag }}
+          tag_name: ${{ needs.set-output.outputs.version }}
           release_name: Release ${{ needs.set-output.outputs.version }}
           body_path: release-notes.md
           draft: true
-          prerelease: ${{ contains(needs.set-output.outputs.tag, 'rc') }}
+          prerelease: ${{ contains(needs.set-output.outputs.version, 'rc') }}
       - name: Upload package
         uses: actions/upload-release-asset@v1
         env:

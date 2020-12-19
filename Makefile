@@ -3,13 +3,23 @@ GOOS := linux
 GOARCH := amd64
 GOLANGCI_LINT := $(GOPATH)/bin/golangci-lint
 GOLANGCI_LINT_VERSION := v1.33.0
-VERSION ?= $(shell git rev-parse --abbrev-ref HEAD)
-TAG ?= latest
+VERSION ?= $(shell git describe --tags --abbrev=0)
+DOCKERTAG ?= latest
+GITSHA := $(shell git rev-parse HEAD)
+GITBRANCH := $(shell git rev-parse --abbrev-ref HEAD)
+BUILDUSER := $(shell whoami)@$(shell hostname)
+BUILDDATE := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 
 all: unused lint style test
 
 build:
-	GO111MODULE=on GOOS=$(GOOS) GOARCH=$(GOARCH) CGO_ENABLED=0 go build -o job-pod-reaper main.go
+	GO111MODULE=on GOOS=$(GOOS) GOARCH=$(GOARCH) CGO_ENABLED=0 go build -ldflags="\
+	-X github.com/prometheus/common/version.Version=$(VERSION) \
+	-X github.com/prometheus/common/version.Revision=$(GITSHA) \
+	-X github.com/prometheus/common/version.Branch=$(GITBRANCH) \
+	-X github.com/prometheus/common/version.BuildUser=$(BUILDUSER) \
+	-X github.com/prometheus/common/version.BuildDate=$(BUILDDATE)" \
+	-o job-pod-reaper main.go
 
 test:
 	GO111MODULE=on GOOS=$(GOOS) GOARCH=$(GOARCH) go test -race ./...
@@ -44,10 +54,10 @@ $(GOLANGCI_LINT):
 		| sh -s -- -b $(GOPATH)/bin $(GOLANGCI_LINT_VERSION)
 
 release: build
-	@tar -czf job-pod-reaper-$(TAG).$(GOOS)-$(GOARCH).tar.gz job-pod-reaper
-	@echo job-pod-reaper-$(TAG).$(GOOS)-$(GOARCH).tar.gz
-	@sed -i 's/:latest/:$(TAG)/g' install/deployment.yaml
-	@sed -i 's/:latest/:$(TAG)/g' install/ondemand-deployment.yaml
+	@tar -czf job-pod-reaper-$(VERSION).$(GOOS)-$(GOARCH).tar.gz job-pod-reaper
+	@echo job-pod-reaper-$(VERSION).$(GOOS)-$(GOARCH).tar.gz
+	@sed -i 's/:latest/:$(DOCKERTAG)/g' install/deployment.yaml
+	@sed -i 's/:latest/:$(DOCKERTAG)/g' install/ondemand-deployment.yaml
 
 release-notes:
 	@bash -c 'while IFS= read -r line; do if [[ "$$line" == "## "* && "$$line" != "## $(VERSION) "* ]]; then break ; fi; echo "$$line"; done < "CHANGELOG.md"' \

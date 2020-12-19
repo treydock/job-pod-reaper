@@ -2,7 +2,7 @@
 [![GitHub release](https://img.shields.io/github/v/release/OSC/job-pod-reaper?include_prereleases&sort=semver)](https://github.com/OSC/job-pod-reaper/releases/latest)
 ![GitHub All Releases](https://img.shields.io/github/downloads/OSC/job-pod-reaper/total)
 ![Docker Pulls](https://img.shields.io/docker/pulls/ohiosupercomputer/job-pod-reaper)
-[![Go Report Card](https://goreportcard.com/badge/github.com/OSC/job-pod-reaper)](https://goreportcard.com/report/github.com/OSC/job-pod-reaper)
+[![Go Report Card](https://goreportcard.com/badge/github.com/OSC/job-pod-reaper?ts=1)](https://goreportcard.com/report/github.com/OSC/job-pod-reaper)
 [![codecov](https://codecov.io/gh/OSC/job-pod-reaper/branch/main/graph/badge.svg)](https://codecov.io/gh/OSC/job-pod-reaper)
 
 # job-pod-reaper
@@ -86,8 +86,6 @@ To give a lifetime to your pods, add the following annotation:
 
 `DURATION` has to be a [valid golang duration string](https://golang.org/pkg/time/#ParseDuration).
 
-A duration string is a possibly signed sequence of decimal numbers, each with optional fraction and a unit suffix, such as "300ms", "-1.5h" or "2h45m". Valid time units are "ns", "us" (or "µs"), "ms", "s", "m", "h".
-
 Example: `pod.kubernetes.io/lifetime: 24h`
 
 The above annotation will cause the pod to be reaped (killed) once it reaches the age of 1d (24h)
@@ -104,7 +102,6 @@ The following flags and environment variables can modify the behavior of the job
 | --reap-max=30         | REAP_MAX=30         | The maximum number of jobs to reap during each loop                   |
 | --reap-interval=60    | REAP_INTERVAL=60    | The number of seconds between each reaping execution when run in loop |
 | --reap-namespaces=all | REAP_NAMESPACES=all | Comma separated list of namespaces to reap, ignored if use --namespace-labels |
-| --reap-timestamp      | REAP_TIMESTAMP=start| The Pod timestamp evaluate for reaping, One of: [start, creation]     |
 | --namespace-labels    | NAMESPACE_LABELS    | The labels to use when filtering namespaces to search, overrides --reap-namespaces |
 | --pods-labels         | PODS_LABELS         | Comma separated list of Pod labels to filter which pods to reap       |
 | --job-label=job       | JOB_LABEL=job       | The label associated to objects that represent a job to reap          |
