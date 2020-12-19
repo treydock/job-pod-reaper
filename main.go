@@ -140,11 +140,7 @@ func run(clientset kubernetes.Interface, logger log.Logger) {
 		level.Error(logger).Log("msg", "Error getting job objects", "err", err)
 		return
 	}
-	err = reap(clientset, jobObjects, logger)
-	if err != nil {
-		level.Error(logger).Log("msg", "Error reaping", "err", err)
-		return
-	}
+	reap(clientset, jobObjects, logger)
 }
 
 func getNamespaces(clientset kubernetes.Interface, logger log.Logger) ([]string, error) {
@@ -268,14 +264,15 @@ func getJobObjects(clientset kubernetes.Interface, jobs []podJob, logger log.Log
 	return jobObjects, nil
 }
 
-func reap(clientset kubernetes.Interface, jobObjects []jobObject, logger log.Logger) error {
+func reap(clientset kubernetes.Interface, jobObjects []jobObject, logger log.Logger) {
 	deletedPods := 0
 	deletedServices := 0
 	deletedConfigMaps := 0
 	deletedSecrets := 0
 	for _, job := range jobObjects {
 		reapLogger := log.With(logger, "job", job.jobID, "name", job.name, "namespace", job.namespace)
-		if job.objectType == "pod" {
+		switch job.objectType {
+		case "pod":
 			err := clientset.CoreV1().Pods(job.namespace).Delete(context.TODO(), job.name, metav1.DeleteOptions{})
 			if err != nil {
 				level.Error(reapLogger).Log("msg", "Error deleting pod", "err", err)
@@ -283,8 +280,7 @@ func reap(clientset kubernetes.Interface, jobObjects []jobObject, logger log.Log
 			}
 			level.Info(reapLogger).Log("msg", "Pod deleted")
 			deletedPods++
-		}
-		if job.objectType == "service" {
+		case "service":
 			err := clientset.CoreV1().Services(job.namespace).Delete(context.TODO(), job.name, metav1.DeleteOptions{})
 			if err != nil {
 				level.Error(reapLogger).Log("msg", "Error deleting service", "err", err)
@@ -292,8 +288,7 @@ func reap(clientset kubernetes.Interface, jobObjects []jobObject, logger log.Log
 			}
 			level.Info(reapLogger).Log("msg", "Service deleted")
 			deletedServices++
-		}
-		if job.objectType == "configmap" {
+		case "configmap":
 			err := clientset.CoreV1().ConfigMaps(job.namespace).Delete(context.TODO(), job.name, metav1.DeleteOptions{})
 			if err != nil {
 				level.Error(reapLogger).Log("msg", "Error deleting config map", "err", err)
@@ -301,8 +296,7 @@ func reap(clientset kubernetes.Interface, jobObjects []jobObject, logger log.Log
 			}
 			level.Info(reapLogger).Log("msg", "ConfigMap deleted")
 			deletedConfigMaps++
-		}
-		if job.objectType == "secret" {
+		case "secret":
 			err := clientset.CoreV1().Secrets(job.namespace).Delete(context.TODO(), job.name, metav1.DeleteOptions{})
 			if err != nil {
 				level.Error(reapLogger).Log("msg", "Error deleting secret", "err", err)
@@ -314,14 +308,4 @@ func reap(clientset kubernetes.Interface, jobObjects []jobObject, logger log.Log
 	}
 	level.Info(logger).Log("msg", "Reap summary",
 		"pods", deletedPods, "services", deletedServices, "configmaps", deletedConfigMaps, "secrets", deletedSecrets)
-	return nil
-}
-
-func sliceContains(slice []string, str string) bool {
-	for _, s := range slice {
-		if str == s {
-			return true
-		}
-	}
-	return false
 }
