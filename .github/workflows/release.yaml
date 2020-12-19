@@ -2,45 +2,102 @@ name: Release
 
 on:
   push:
-    branches:
-      - main
     tags:
       - '*'
 
 jobs:
-  release:
+  set-output:
+    name: Set Output
     runs-on: ubuntu-latest
-    name: Release
+    steps:
+      - run: echo $GITHUB_REF
+      - name: Set tag
+        id: tag
+        run: echo ::set-output name=tag::${GITHUB_REF#refs/*/}
+      - name: Set version
+        id: version
+        run: echo ::set-output name=version::${GITHUB_REF#refs/*/v}
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+      version: ${{ steps.version.outputs.version }}
+  build-release:
+    needs: set-output
+    name: Build Release
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - uses: docker/setup-qemu-action@v1
-      - uses: docker/setup-buildx-action@v1
-      - name: Login to DockerHub
-        uses: docker/login-action@v1 
+      - name: Setup Go
+        uses: actions/setup-go@v2
         with:
-          username: ${{ secrets.DOCKER_HUB_USERNAME }}
-          password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
-      - name: Build and push latest
-        if: ${{ github.ref == 'refs/heads/main' }}
-        id: docker_build_latest
-        uses: docker/build-push-action@v2
+          go-version: '1.15'
+      - name: Package
+        id: package
+        run: echo "::set-output name=package::$(make release TAG=${{ needs.set-output.outputs.tag }} | grep tar.gz)"
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v2
         with:
-          context: ./
-          file: ./Dockerfile
-          push: true
-          tags: ohiosupercomputer/job-pod-reaper:latest
-      - name: Build and push tag ${{ github.event.ref }}
-        if: ${{ github.ref != 'refs/heads/main' }}
-        id: docker_build_tag
-        uses: docker/build-push-action@v2
+          name: package
+          path: |
+            ${{ steps.package.outputs.package }}
+            install/*.yaml
+    outputs:
+      package: ${{ steps.package.outputs.package }}
+  release:
+    needs: [set-output, build-release]
+    runs-on: ubuntu-latest
+    name: Create Release
+    steps:
+      - uses: actions/checkout@v2
+      - name: Download package
+        uses: actions/download-artifact@v2
         with:
-          context: ./
-          file: ./Dockerfile
-          push: true
-          tags: ohiosupercomputer/job-pod-reaper:${{ github.event.ref }}
-      - name: Image digest
-        if: steps.docker_build_latest.outputs.digest
-        run: echo ${{ steps.docker_build_latest.outputs.digest }}
-      - name: Image digest
-        if: steps.docker_build_tag.outputs.digest
-        run: echo ${{ steps.docker_build_tag.outputs.digest }}
+          name: package
+      - name: Make Release Notes
+        run: make release-notes VERSION=${{ needs.set-output.outputs.version }} > release-notes.md
+      - name: Create Release ${{ needs.set-output.outputs.version }}
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ needs.set-output.outputs.tag }}
+          release_name: Release ${{ needs.set-output.outputs.version }}
+          body_path: release-notes.md
+          draft: true
+          prerelease: ${{ contains(needs.set-output.outputs.tag, 'rc') }}
+      - name: Upload package
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./${{ needs.build-release.outputs.package }}
+          asset_name: ${{ needs.build-release.outputs.package }}
+          asset_content_type: application/gzip
+      - name: Upload namespace-rbac
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./install/namespace-rbac.yaml
+          asset_name: namespace-rbac.yaml
+          asset_content_type: text/x-yaml
+      - name: Upload deployment
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./install/deployment.yaml
+          asset_name: deployment.yaml
+          asset_content_type: text/x-yaml
+      - name: Upload ondemand-deployment
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./install/ondemand-deployment.yaml
+          asset_name: ondemand-deployment.yaml
+          asset_content_type: text/x-yaml

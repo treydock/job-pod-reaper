@@ -1,28 +1,42 @@
 GOPATH := $(shell go env GOPATH)
+GOOS := linux
+GOARCH := amd64
 GOLANGCI_LINT := $(GOPATH)/bin/golangci-lint
 GOLANGCI_LINT_VERSION := v1.33.0
+VERSION ?= $(shell git rev-parse --abbrev-ref HEAD)
+TAG ?= latest
 
 all: unused lint test
 
 build:
-	GO111MODULE=on GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o job-pod-reaper main.go
+	GO111MODULE=on GOOS=$(GOOS) GOARCH=$(GOARCH) CGO_ENABLED=0 go build -o job-pod-reaper main.go
 
 test:
-	GO111MODULE=on GOOS=linux GOARCH=amd64 go test -race ./...
+	GO111MODULE=on GOOS=$(GOOS) GOARCH=$(GOARCH) go test -race ./...
 
 coverage:
-	GO111MODULE=on GOOS=linux GOARCH=amd64 go test -race -coverpkg=./... -coverprofile=coverage.txt -covermode=atomic ./...
+	GO111MODULE=on GOOS=$(GOOS) GOARCH=$(GOARCH) go test -race -coverpkg=./... -coverprofile=coverage.txt -covermode=atomic ./...
 
 unused:
 	@echo ">> running check for unused/missing packages in go.mod"
-	GO111MODULE=on GOOS=linux GOARCH=amd64 go mod tidy
+	GO111MODULE=on GOOS=$(GOOS) GOARCH=$(GOARCH) go mod tidy
 	@git diff --exit-code -- go.sum go.mod
 
 lint: $(GOLANGCI_LINT)
 	@echo ">> running golangci-lint"
-	GO111MODULE=on GOOS=linux GOARCH=amd64 go list -e -compiled -test=true -export=false -deps=true -find=false -tags= -- ./... > /dev/null
-	GO111MODULE=on GOOS=linux GOARCH=amd64 $(GOLANGCI_LINT) run ./...
+	GO111MODULE=on GOOS=$(GOOS) GOARCH=$(GOARCH) go list -e -compiled -test=true -export=false -deps=true -find=false -tags= -- ./... > /dev/null
+	GO111MODULE=on GOOS=$(GOOS) GOARCH=$(GOARCH) $(GOLANGCI_LINT) run ./...
 
 $(GOLANGCI_LINT):
 	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh \
 		| sh -s -- -b $(GOPATH)/bin $(GOLANGCI_LINT_VERSION)
+
+release: build
+	@tar -czf job-pod-reaper-$(TAG).$(GOOS)-$(GOARCH).tar.gz job-pod-reaper
+	@echo job-pod-reaper-$(TAG).$(GOOS)-$(GOARCH).tar.gz
+	@sed -i 's/:latest/:$(TAG)/g' install/deployment.yaml
+	@sed -i 's/:latest/:$(TAG)/g' install/ondemand-deployment.yaml
+
+release-notes:
+	@bash -c 'while IFS= read -r line; do if [[ "$$line" == "## "* && "$$line" != "## $(VERSION) "* ]]; then break ; fi; echo "$$line"; done < "CHANGELOG.md"' \
+	true

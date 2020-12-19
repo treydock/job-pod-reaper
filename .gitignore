@@ -1,3 +1,3 @@
 job-pod-reaper
 /coverage.txt
-
+*.tar.gz

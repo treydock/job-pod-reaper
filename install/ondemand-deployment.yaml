@@ -16,7 +16,7 @@ spec:
       serviceAccountName: job-pod-reaper
       containers:
       - name: ondemand-job-pod-reaper
-        image: docker.io/ohiosupercomputer/job-pod-reaper:v0.1.0
+        image: docker.io/ohiosupercomputer/job-pod-reaper:latest
         imagePullPolicy: Always
         args:
         - --reap-max=30
@@ -26,7 +26,7 @@ spec:
         - --namespace-labels=app.kubernetes.io/name=open-ondemand
         - --pods-labels=app.kubernetes.io/managed-by=open-ondemand
         - --job-label=job
-        - --log-level=debug
+        - --log-level=info
         - --log-format=logfmt
         securityContext:
           allowPrivilegeEscalation: false
