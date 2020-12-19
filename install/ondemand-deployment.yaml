@@ -26,7 +26,7 @@ spec:
         - --namespace-labels=app.kubernetes.io/name=open-ondemand
         - --pods-labels=app.kubernetes.io/managed-by=open-ondemand
         - --job-label=job
-        - --log-level=debug
+        - --log-level=info
         - --log-format=logfmt
         securityContext:
           allowPrivilegeEscalation: false

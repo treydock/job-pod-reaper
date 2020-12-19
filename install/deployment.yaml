@@ -25,7 +25,7 @@ spec:
         - --reap-namespaces=all
         - --reap-timestamp=start
         - --job-label=job
-        - --log-level=debug
+        - --log-level=info
         - --log-format=logfmt
         securityContext:
           allowPrivilegeEscalation: false
