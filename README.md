@@ -3,7 +3,7 @@
 ![GitHub All Releases](https://img.shields.io/github/downloads/OSC/job-pod-reaper/total)
 ![Docker Pulls](https://img.shields.io/docker/pulls/ohiosupercomputer/job-pod-reaper)
 [![Go Report Card](https://goreportcard.com/badge/github.com/OSC/job-pod-reaper)](https://goreportcard.com/report/github.com/OSC/job-pod-reaper)
-[![codecov](https://codecov.io/gh/OSC/job-pod-reaper/branch/master/graph/badge.svg)](https://codecov.io/gh/OSC/job-pod-reaper)
+[![codecov](https://codecov.io/gh/OSC/job-pod-reaper/branch/main/graph/badge.svg)](https://codecov.io/gh/OSC/job-pod-reaper)
 
 # job-pod-reaper
 
