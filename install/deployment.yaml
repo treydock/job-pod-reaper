@@ -20,10 +20,8 @@ spec:
         imagePullPolicy: Always
         args:
         - --reap-max=30
-        - --reap-evicted-pods
         - --reap-interval=60s
         - --reap-namespaces=all
-        - --reap-timestamp=start
         - --job-label=job
         - --log-level=info
         - --log-format=logfmt

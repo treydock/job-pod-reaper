@@ -12,6 +12,8 @@ jobs:
     name: Test
     steps:
       - uses: actions/checkout@v2
+        with:
+          fetch-depth: 3
       - name: Setup Go
         uses: actions/setup-go@v2
         with:
