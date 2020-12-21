@@ -22,26 +22,27 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	"github.com/prometheus/common/version"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
+	_ "k8s.io/client-go/plugin/pkg/client/auth/oidc"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 )
 
 const (
-	lifetimeAnnotation string = "pod.kubernetes.io/lifetime"
+	appName            = "job-pod-reaper"
+	lifetimeAnnotation = "pod.kubernetes.io/lifetime"
 )
 
 var (
-	runOnce = kingpin.Flag("run-once",
-		"Whether to run in loop (true) or run once like via cron (false)").Default("false").Envar("RUN_ONCE").Bool()
-	reapMax = kingpin.Flag("reap-max",
-		"Maximum Pods to reap in each run, set to 0 to disable this limit").Default("30").Envar("REAP_MAX").Int()
+	runOnce         = kingpin.Flag("run-once", "Set application to run once then exit, ie executed with cron").Default("false").Envar("RUN_ONCE").Bool()
+	reapMax         = kingpin.Flag("reap-max", "Maximum Pods to reap in each run, set to 0 to disable this limit").Default("30").Envar("REAP_MAX").Int()
 	reapInterval    = kingpin.Flag("reap-interval", "Duration between repear runs").Default("60s").Envar("REAP_INTERLVAL").Duration()
-	reapNamespaces  = kingpin.Flag("reap-namespaces", "Namespaces to reap").Default("all").Envar("REAP_NAMESPACES").String()
-	namespaceLabels = kingpin.Flag("namespace-labels", "Labels to use when filtering namespaces").Default("").Envar("NAMESPACE_LABELS").String()
+	reapNamespaces  = kingpin.Flag("reap-namespaces", "Namespaces to reap, ignored if --namespace-labels is set").Default("all").Envar("REAP_NAMESPACES").String()
+	namespaceLabels = kingpin.Flag("namespace-labels", "Labels to use when filtering namespaces, causes --namespace-labels to be ignored").Default("").Envar("NAMESPACE_LABELS").String()
 	podsLabels      = kingpin.Flag("pods-labels", "Labels to use when filtering pods").Default("").Envar("PODS_LABELS").String()
 	jobLabel        = kingpin.Flag("job-label", "Label to associate pod job with other objects").Default("job").Envar("JOB_LABEL").String()
 	kubeconfig      = kingpin.Flag("kubeconfig", "Path to kubeconfig when running outside Kubernetes cluster").Default("").Envar("KUBECONFIG").String()
@@ -68,6 +69,7 @@ type jobObject struct {
 }
 
 func main() {
+	kingpin.Version(version.Print(appName))
 	kingpin.HelpFlag.Short('h')
 	kingpin.Parse()
 
@@ -113,6 +115,9 @@ func main() {
 		level.Error(logger).Log("msg", "Unable to generate Clientset", "err", err)
 		os.Exit(1)
 	}
+
+	level.Info(logger).Log("msg", fmt.Sprintf("Starting %s", appName), "version", version.Info())
+	level.Info(logger).Log("msg", "Build context", "build_context", version.BuildContext())
 
 	for {
 		run(clientset, logger)
