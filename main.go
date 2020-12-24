@@ -16,12 +16,15 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/prometheus/common/version"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -35,6 +38,8 @@ import (
 const (
 	appName            = "job-pod-reaper"
 	lifetimeAnnotation = "pod.kubernetes.io/lifetime"
+	metricsPath        = "/metrics"
+	metricsNamespace   = "job_pod_reaper"
 )
 
 var (
@@ -46,13 +51,50 @@ var (
 	podsLabels      = kingpin.Flag("pods-labels", "Labels to use when filtering pods").Default("").Envar("PODS_LABELS").String()
 	jobLabel        = kingpin.Flag("job-label", "Label to associate pod job with other objects").Default("job").Envar("JOB_LABEL").String()
 	kubeconfig      = kingpin.Flag("kubeconfig", "Path to kubeconfig when running outside Kubernetes cluster").Default("").Envar("KUBECONFIG").String()
+	listenAddress   = kingpin.Flag("listen-address", "Address to listen for HTTP requests").Default(":8080").Envar("LISTEN_ADDRESS").String()
+	processMetrics  = kingpin.Flag("process-metrics", "Collect metrics about running process such as CPU and memory and Go stats").Default("true").Envar("PROCESS_METRICS").Bool()
 	logLevel        = kingpin.Flag("log-level", "Log level, One of: [debug, info, warn, error]").Default("info").Envar("LOG_LEVEL").String()
 	logFormat       = kingpin.Flag("log-format", "Log format, One of: [logfmt, json]").Default("logfmt").Envar("LOG_FORMAT").String()
 	timestampFormat = log.TimestampFormat(
 		func() time.Time { return time.Now().UTC() },
 		"2006-01-02T15:04:05.000Z07:00",
 	)
-	timeNow = time.Now
+	timeNow         = time.Now
+	metricBuildInfo = prometheus.NewGauge(prometheus.GaugeOpts{
+		Namespace: metricsNamespace,
+		Name:      "build_info",
+		Help:      "Build information",
+		ConstLabels: prometheus.Labels{
+			"version":   version.Version,
+			"revision":  version.Revision,
+			"branch":    version.Branch,
+			"builddate": version.BuildDate,
+			"goversion": version.GoVersion,
+		},
+	})
+	metricReapedTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: metricsNamespace,
+			Name:      "reaped_total",
+			Help:      "Total number of object types reaped",
+		},
+		[]string{"type"},
+	)
+	metricError = prometheus.NewGauge(prometheus.GaugeOpts{
+		Namespace: metricsNamespace,
+		Name:      "error",
+		Help:      "Indicates an error was encountered",
+	})
+	metricErrorsTotal = prometheus.NewCounter(prometheus.CounterOpts{
+		Namespace: metricsNamespace,
+		Name:      "errors_total",
+		Help:      "Total number of errors",
+	})
+	metricDuration = prometheus.NewGauge(prometheus.GaugeOpts{
+		Namespace: metricsNamespace,
+		Name:      "run_duration_seconds",
+		Help:      "Last runtime duration in seconds",
+	})
 )
 
 type podJob struct {
@@ -66,6 +108,14 @@ type jobObject struct {
 	jobID      string
 	name       string
 	namespace  string
+}
+
+func init() {
+	metricBuildInfo.Set(1)
+	metricReapedTotal.WithLabelValues("pod")
+	metricReapedTotal.WithLabelValues("service")
+	metricReapedTotal.WithLabelValues("configmap")
+	metricReapedTotal.WithLabelValues("secret")
 }
 
 func main() {
@@ -119,33 +169,58 @@ func main() {
 	level.Info(logger).Log("msg", fmt.Sprintf("Starting %s", appName), "version", version.Info())
 	level.Info(logger).Log("msg", "Build context", "build_context", version.BuildContext())
 
+	http.Handle(metricsPath, promhttp.HandlerFor(metricGathers(), promhttp.HandlerOpts{}))
+
+	go func() {
+		if err := http.ListenAndServe(*listenAddress, nil); err != nil {
+			level.Error(logger).Log("msg", "Error starting HTTP server", "err", err)
+			os.Exit(1)
+		}
+	}()
+
 	for {
-		run(clientset, logger)
-		if *runOnce {
-			break
+		var errNum int
+		err = run(clientset, logger)
+		if err != nil {
+			errNum = 1
 		} else {
-			level.Debug(logger).Log("msg", "Sleeping...", "interval", fmt.Sprintf("%.0f", (*reapInterval).Seconds()))
+			errNum = 0
+		}
+		metricError.Set(float64(errNum))
+		if *runOnce {
+			os.Exit(errNum)
+		} else {
+			level.Debug(logger).Log("msg", "Sleeping for interval", "interval", fmt.Sprintf("%.0f", (*reapInterval).Seconds()))
 			time.Sleep(*reapInterval)
 		}
 	}
 }
-func run(clientset kubernetes.Interface, logger log.Logger) {
+
+func run(clientset kubernetes.Interface, logger log.Logger) error {
+	start := timeNow()
+	defer metricDuration.Set(time.Since(start).Seconds())
 	namespaces, err := getNamespaces(clientset, logger)
 	if err != nil {
 		level.Error(logger).Log("msg", "Error getting namespaces", "err", err)
-		return
+		return err
 	}
 	jobs, err := getJobs(clientset, namespaces, logger)
 	if err != nil {
 		level.Error(logger).Log("msg", "Error getting jods", "err", err)
-		return
+		return err
 	}
 	jobObjects, err := getJobObjects(clientset, jobs, logger)
 	if err != nil {
 		level.Error(logger).Log("msg", "Error getting job objects", "err", err)
-		return
+		return err
 	}
-	reap(clientset, jobObjects, logger)
+	errCount := reap(clientset, jobObjects, logger)
+	if errCount > 0 {
+		err := fmt.Errorf("%d errors encountered during reap", errCount)
+		level.Error(logger).Log("msg", err)
+		return err
+	}
+	return nil
 }
 
 func getNamespaces(clientset kubernetes.Interface, logger log.Logger) ([]string, error) {
@@ -189,6 +264,7 @@ func getJobs(clientset kubernetes.Interface, namespaces []string, logger log.Log
 			pods, err := clientset.CoreV1().Pods(ns).List(context.TODO(), listOptions)
 			if err != nil {
 				level.Error(logger).Log("msg", "Error getting pod list", "label", l, "namespace", ns, "err", err)
+				metricErrorsTotal.Inc()
 				return nil, err
 			}
 			for _, pod := range pods.Items {
@@ -206,6 +282,7 @@ func getJobs(clientset kubernetes.Interface, namespaces []string, logger log.Log
 					lifetime, err = time.ParseDuration(val)
 					if err != nil {
 						level.Error(podLogger).Log("msg", "Error parsing annotation, SKIPPING", "annotation", val, "err", err)
+						metricErrorsTotal.Inc()
 						continue
 					}
 				}
@@ -241,6 +318,7 @@ func getJobObjects(clientset kubernetes.Interface, jobs []podJob, logger log.Log
 		services, err := clientset.CoreV1().Services(job.namespace).List(context.TODO(), listOptions)
 		if err != nil {
 			level.Error(jobLogger).Log("msg", "Error getting services", "err", err)
+			metricErrorsTotal.Inc()
 			return nil, err
 		}
 		for _, service := range services.Items {
@@ -250,6 +328,7 @@ func getJobObjects(clientset kubernetes.Interface, jobs []podJob, logger log.Log
 		configmaps, err := clientset.CoreV1().ConfigMaps(job.namespace).List(context.TODO(), listOptions)
 		if err != nil {
 			level.Error(jobLogger).Log("msg", "Error getting config maps", "err", err)
+			metricErrorsTotal.Inc()
 			return nil, err
 		}
 		for _, configmap := range configmaps.Items {
@@ -259,6 +338,7 @@ func getJobObjects(clientset kubernetes.Interface, jobs []podJob, logger log.Log
 		secrets, err := clientset.CoreV1().Secrets(job.namespace).List(context.TODO(), listOptions)
 		if err != nil {
 			level.Error(jobLogger).Log("msg", "Error getting secrets", "err", err)
+			metricErrorsTotal.Inc()
 			return nil, err
 		}
 		for _, secret := range secrets.Items {
@@ -269,48 +349,76 @@ func getJobObjects(clientset kubernetes.Interface, jobs []podJob, logger log.Log
 	return jobObjects, nil
 }
 
-func reap(clientset kubernetes.Interface, jobObjects []jobObject, logger log.Logger) {
+func reap(clientset kubernetes.Interface, jobObjects []jobObject, logger log.Logger) int {
 	deletedPods := 0
 	deletedServices := 0
 	deletedConfigMaps := 0
 	deletedSecrets := 0
+	errCount := 0
 	for _, job := range jobObjects {
 		reapLogger := log.With(logger, "job", job.jobID, "name", job.name, "namespace", job.namespace)
 		switch job.objectType {
 		case "pod":
 			err := clientset.CoreV1().Pods(job.namespace).Delete(context.TODO(), job.name, metav1.DeleteOptions{})
 			if err != nil {
+				errCount++
 				level.Error(reapLogger).Log("msg", "Error deleting pod", "err", err)
+				metricErrorsTotal.Inc()
 				continue
 			}
 			level.Info(reapLogger).Log("msg", "Pod deleted")
+			metricReapedTotal.With(prometheus.Labels{"type": "pod"}).Inc()
 			deletedPods++
 		case "service":
 			err := clientset.CoreV1().Services(job.namespace).Delete(context.TODO(), job.name, metav1.DeleteOptions{})
 			if err != nil {
+				errCount++
 				level.Error(reapLogger).Log("msg", "Error deleting service", "err", err)
+				metricErrorsTotal.Inc()
 				continue
 			}
 			level.Info(reapLogger).Log("msg", "Service deleted")
+			metricReapedTotal.With(prometheus.Labels{"type": "service"}).Inc()
 			deletedServices++
 		case "configmap":
 			err := clientset.CoreV1().ConfigMaps(job.namespace).Delete(context.TODO(), job.name, metav1.DeleteOptions{})
 			if err != nil {
+				errCount++
 				level.Error(reapLogger).Log("msg", "Error deleting config map", "err", err)
+				metricErrorsTotal.Inc()
 				continue
 			}
 			level.Info(reapLogger).Log("msg", "ConfigMap deleted")
+			metricReapedTotal.With(prometheus.Labels{"type": "configmap"}).Inc()
 			deletedConfigMaps++
 		case "secret":
 			err := clientset.CoreV1().Secrets(job.namespace).Delete(context.TODO(), job.name, metav1.DeleteOptions{})
 			if err != nil {
+				errCount++
 				level.Error(reapLogger).Log("msg", "Error deleting secret", "err", err)
+				metricErrorsTotal.Inc()
 				continue
 			}
 			level.Info(reapLogger).Log("msg", "Secret deleted")
+			metricReapedTotal.With(prometheus.Labels{"type": "secret"}).Inc()
 			deletedSecrets++
 		}
 	}
 	level.Info(logger).Log("msg", "Reap summary",
 		"pods", deletedPods, "services", deletedServices, "configmaps", deletedConfigMaps, "secrets", deletedSecrets)
+	return errCount
+}
+
+func metricGathers() prometheus.Gatherers {
+	registry := prometheus.NewRegistry()
+	registry.MustRegister(metricBuildInfo)
+	registry.MustRegister(metricReapedTotal)
+	registry.MustRegister(metricError)
+	registry.MustRegister(metricErrorsTotal)
+	registry.MustRegister(metricDuration)
+	gatherers := prometheus.Gatherers{registry}
+	if *processMetrics {
+		gatherers = append(gatherers, prometheus.DefaultGatherer)
+	}
+	return gatherers
 }

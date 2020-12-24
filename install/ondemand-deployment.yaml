@@ -24,8 +24,12 @@ spec:
         - --namespace-labels=app.kubernetes.io/name=open-ondemand
         - --pods-labels=app.kubernetes.io/managed-by=open-ondemand
         - --job-label=job
+        - --listen-address=:8080
         - --log-level=info
         - --log-format=logfmt
+        ports:
+        - containerPort: 8080
+          name: http
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:
@@ -43,3 +47,20 @@ spec:
             memory: 50Mi
       nodeSelector:
         kubernetes.io/os: linux
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ondemand-job-pod-reaper
+  namespace: job-pod-reaper
+  labels:
+    app.kubernetes.io/name: job-pod-reaper
+    app.kubernetes.io/instance: ondemand-job-pod-reaper
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 8080
+    targetPort: http
+  selector:
+    app.kubernetes.io/instance: ondemand-job-pod-reaper
