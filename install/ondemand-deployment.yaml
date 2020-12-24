@@ -4,14 +4,18 @@ kind: Deployment
 metadata:
   name: ondemand-job-pod-reaper
   namespace: job-pod-reaper
+  labels:
+    app.kubernetes.io/name: job-pod-reaper
+    app.kubernetes.io/instance: ondemand-job-pod-reaper
 spec:
   selector:
     matchLabels:
-      app: ondemand-job-pod-reaper
+      app.kubernetes.io/instance: ondemand-job-pod-reaper
   template:
     metadata:
       labels:
-        app: ondemand-job-pod-reaper
+        app.kubernetes.io/name: job-pod-reaper
+        app.kubernetes.io/instance: ondemand-job-pod-reaper
     spec:
       serviceAccountName: job-pod-reaper
       containers:
@@ -29,7 +33,7 @@ spec:
         - --log-format=logfmt
         ports:
         - containerPort: 8080
-          name: http
+          name: metrics
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:
@@ -59,8 +63,8 @@ metadata:
 spec:
   type: ClusterIP
   ports:
-  - name: http
+  - name: metrics
     port: 8080
-    targetPort: http
+    targetPort: metrics
   selector:
     app.kubernetes.io/instance: ondemand-job-pod-reaper

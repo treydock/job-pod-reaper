@@ -4,14 +4,16 @@ kind: Deployment
 metadata:
   name: job-pod-reaper
   namespace: job-pod-reaper
+  labels:
+    app.kubernetes.io/name: job-pod-reaper
 spec:
   selector:
     matchLabels:
-      app: job-pod-reaper
+      app.kubernetes.io/name: job-pod-reaper
   template:
     metadata:
       labels:
-        app: job-pod-reaper
+        app.kubernetes.io/name: job-pod-reaper
     spec:
       serviceAccountName: job-pod-reaper
       containers:
@@ -28,7 +30,7 @@ spec:
         - --log-format=logfmt
         ports:
         - containerPort: 8080
-          name: http
+          name: metrics
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:
@@ -57,8 +59,8 @@ metadata:
 spec:
   type: ClusterIP
   ports:
-  - name: http
+  - name: metrics
     port: 8080
-    targetPort: http
+    targetPort: metrics
   selector:
     app.kubernetes.io/name: job-pod-reaper
