@@ -60,6 +60,10 @@ metadata:
   labels:
     app.kubernetes.io/name: job-pod-reaper
     app.kubernetes.io/instance: ondemand-job-pod-reaper
+  annotations:
+    prometheus.io/scrape: 'true'
+    prometheus.io/path: /metrics
+    prometheus.io/port: '8080'
 spec:
   type: ClusterIP
   ports:

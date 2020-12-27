@@ -56,6 +56,10 @@ metadata:
   namespace: job-pod-reaper
   labels:
     app.kubernetes.io/name: job-pod-reaper
+  annotations:
+    prometheus.io/scrape: 'true'
+    prometheus.io/path: /metrics
+    prometheus.io/port: '8080'
 spec:
   type: ClusterIP
   ports:
