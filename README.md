@@ -18,6 +18,8 @@ Current list of resources that can be reaped:
 * ConfigMap
 * Secret
 
+Metrics about the count of reaped resources, duration of last reaping, and error counts can be queried using Prometheus `/metrics` endpoint exposed as a Service on port `8080`.
+
 ## Kubernetes support
 
 Currently this code is built and tested against Kubernetes 1.19.
