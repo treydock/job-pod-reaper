@@ -18,6 +18,8 @@ Current list of resources that can be reaped:
 * ConfigMap
 * Secret
 
+Metrics about the count of reaped resources, duration of last reaping, and error counts can be queried using Prometheus `/metrics` endpoint exposed as a Service on port `8080`.
+
 ## Kubernetes support
 
 Currently this code is built and tested against Kubernetes 1.19.
@@ -106,5 +108,7 @@ The following flags and environment variables can modify the behavior of the job
 | --pods-labels         | PODS_LABELS         | Comma separated list of Pod labels to filter which pods to reap       |
 | --job-label=job       | JOB_LABEL=job       | The label associated to objects that represent a job to reap          |
 | --kubeconfig          | KUBECONFIG          | The path to Kubernetes config, required when run outside Kubernetes   |
+| --listen-address      | LISTEN_ADDRESS=:8080| Address to listen for HTTP requests                                   |
+| --no-process-metrics  | PROCESS_METRICS=false | Disable metrics about the running processes such as CPU, memory and Go stats |
 | --log-level=info      | LOG_LEVEL=info      | The logging level One of: [debug, info, warn, error]                  |
 | --log-format=logfmt   | LOG_FORMAT=logfmt   | The logging format, either logfmt or json                             |

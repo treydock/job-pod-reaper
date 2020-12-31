@@ -4,14 +4,16 @@ kind: Deployment
 metadata:
   name: job-pod-reaper
   namespace: job-pod-reaper
+  labels:
+    app.kubernetes.io/name: job-pod-reaper
 spec:
   selector:
     matchLabels:
-      app: job-pod-reaper
+      app.kubernetes.io/name: job-pod-reaper
   template:
     metadata:
       labels:
-        app: job-pod-reaper
+        app.kubernetes.io/name: job-pod-reaper
     spec:
       serviceAccountName: job-pod-reaper
       containers:
@@ -23,8 +25,12 @@ spec:
         - --reap-interval=60s
         - --reap-namespaces=all
         - --job-label=job
+        - --listen-address=:8080
         - --log-level=info
         - --log-format=logfmt
+        ports:
+        - containerPort: 8080
+          name: metrics
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:
@@ -42,3 +48,23 @@ spec:
             memory: 50Mi
       nodeSelector:
         kubernetes.io/os: linux
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: job-pod-reaper
+  namespace: job-pod-reaper
+  labels:
+    app.kubernetes.io/name: job-pod-reaper
+  annotations:
+    prometheus.io/scrape: 'true'
+    prometheus.io/path: /metrics
+    prometheus.io/port: '8080'
+spec:
+  type: ClusterIP
+  ports:
+  - name: metrics
+    port: 8080
+    targetPort: metrics
+  selector:
+    app.kubernetes.io/name: job-pod-reaper

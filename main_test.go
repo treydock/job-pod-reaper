@@ -16,10 +16,12 @@ package main
 import (
 	"context"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/go-kit/kit/log"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -78,6 +80,19 @@ var (
 			Labels: map[string]string{
 				"job":                          "2",
 				"app.kubernetes.io/managed-by": "open-ondemand",
+			},
+			CreationTimestamp: podStartTime,
+		},
+	}, &v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "ondemand-job3",
+			Namespace: "user-user3",
+			Annotations: map[string]string{
+				"pod.kubernetes.io/lifetime": "30m",
+			},
+			Labels: map[string]string{
+				"job":                          "3",
+				"app.kubernetes.io/managed-by": "test",
 			},
 			CreationTimestamp: podStartTime,
 		},
@@ -238,6 +253,44 @@ func TestGetJobsCase1(t *testing.T) {
 	}
 }
 
+func TestGetJobsNoPodLabels(t *testing.T) {
+	if _, err := kingpin.CommandLine.Parse([]string{}); err != nil {
+		t.Fatal(err)
+	}
+	w := log.NewSyncWriter(os.Stderr)
+	logger := log.NewLogfmtLogger(w)
+
+	labels := ""
+	podsLabels = &labels
+
+	timeNow = func() time.Time {
+		t, _ := time.Parse("01/02/2006 15:04:05", "01/01/2020 15:00:00")
+		return t
+	}
+
+	namespaces, err := getNamespaces(clientset, logger)
+	if err != nil {
+		t.Errorf("Unexpected error: %v", err)
+	}
+	jobs, err := getJobs(clientset, namespaces, logger)
+	if err != nil {
+		t.Errorf("Unexpected error: %v", err)
+	}
+	if len(jobs) != 3 {
+		t.Errorf("Expected 3 jobs, got %d", len(jobs))
+		return
+	}
+	if val := jobs[0].jobID; val != "1" {
+		t.Errorf("Unexpected jobID, got: %v", val)
+	}
+	if val := jobs[1].jobID; val != "2" {
+		t.Errorf("Unexpected jobID, got: %v", val)
+	}
+	if val := jobs[2].jobID; val != "3" {
+		t.Errorf("Unexpected jobID, got: %v", val)
+	}
+}
+
 func TestGetJobsNamespaceLabels(t *testing.T) {
 	if _, err := kingpin.CommandLine.Parse([]string{}); err != nil {
 		t.Fatal(err)
@@ -286,13 +339,15 @@ func TestRun(t *testing.T) {
 		return t
 	}
 
-	run(clientset, logger)
-
+	err := run(clientset, logger)
+	if err != nil {
+		t.Errorf("Unexpected error: %v", err)
+	}
 	pods, err := clientset.CoreV1().Pods(metav1.NamespaceAll).List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		t.Errorf("Unexpected error getting pods: %v", err)
 	}
-	if len(pods.Items) != 1 {
+	if len(pods.Items) != 2 {
 		t.Errorf("Unexpected number of pods, got: %d", len(pods.Items))
 	}
 	services, err := clientset.CoreV1().Services(metav1.NamespaceAll).List(context.TODO(), metav1.ListOptions{})
@@ -315,5 +370,59 @@ func TestRun(t *testing.T) {
 	}
 	if len(secrets.Items) != 0 {
 		t.Errorf("Unexpected number of services, got: %d", len(secrets.Items))
+	}
+
+	expected := `
+	# HELP job_pod_reaper_error Indicates an error was encountered
+	# TYPE job_pod_reaper_error gauge
+	job_pod_reaper_error 0
+	# HELP job_pod_reaper_errors_total Total number of errors
+	# TYPE job_pod_reaper_errors_total counter
+	job_pod_reaper_errors_total 0
+	# HELP job_pod_reaper_reaped_total Total number of object types reaped
+	# TYPE job_pod_reaper_reaped_total counter
+	job_pod_reaper_reaped_total{type="configmap"} 2
+	job_pod_reaper_reaped_total{type="pod"} 2
+	job_pod_reaper_reaped_total{type="secret"} 2
+	job_pod_reaper_reaped_total{type="service"} 2
+	`
+
+	if err := testutil.GatherAndCompare(metricGathers(), strings.NewReader(expected),
+		"job_pod_reaper_reaped_total", "job_pod_reaper_error", "job_pod_reaper_errors_total"); err != nil {
+		t.Errorf("unexpected collecting result:\n%s", err)
+	}
+
+	labels = ""
+	podsLabels = &labels
+	err = run(clientset, logger)
+	if err != nil {
+		t.Errorf("Unexpected error: %v", err)
+	}
+	pods, err = clientset.CoreV1().Pods(metav1.NamespaceAll).List(context.TODO(), metav1.ListOptions{})
+	if err != nil {
+		t.Errorf("Unexpected error getting pods: %v", err)
+	}
+	if len(pods.Items) != 1 {
+		t.Errorf("Unexpected number of pods, got: %d", len(pods.Items))
+	}
+
+	expected = `
+	# HELP job_pod_reaper_error Indicates an error was encountered
+	# TYPE job_pod_reaper_error gauge
+	job_pod_reaper_error 0
+	# HELP job_pod_reaper_errors_total Total number of errors
+	# TYPE job_pod_reaper_errors_total counter
+	job_pod_reaper_errors_total 0
+	# HELP job_pod_reaper_reaped_total Total number of object types reaped
+	# TYPE job_pod_reaper_reaped_total counter
+	job_pod_reaper_reaped_total{type="configmap"} 2
+	job_pod_reaper_reaped_total{type="pod"} 3
+	job_pod_reaper_reaped_total{type="secret"} 2
+	job_pod_reaper_reaped_total{type="service"} 2
+	`
+
+	if err := testutil.GatherAndCompare(metricGathers(), strings.NewReader(expected),
+		"job_pod_reaper_reaped_total", "job_pod_reaper_error", "job_pod_reaper_errors_total"); err != nil {
+		t.Errorf("unexpected collecting result:\n%s", err)
 	}
 }
