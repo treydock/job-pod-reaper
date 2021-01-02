@@ -405,7 +405,11 @@ func reap(clientset kubernetes.Interface, jobObjects []jobObject, logger log.Log
 		}
 	}
 	level.Info(logger).Log("msg", "Reap summary",
-		"pods", deletedPods, "services", deletedServices, "configmaps", deletedConfigMaps, "secrets", deletedSecrets)
+		"pods", deletedPods,
+		"services", deletedServices,
+		"configmaps", deletedConfigMaps,
+		"secrets", deletedSecrets,
+	)
 	return errCount
 }
 
