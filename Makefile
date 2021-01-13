@@ -4,11 +4,12 @@ GOARCH := amd64
 GOLANGCI_LINT := $(GOPATH)/bin/golangci-lint
 GOLANGCI_LINT_VERSION := v1.33.0
 VERSION ?= $(shell git describe --tags --abbrev=0 || git rev-parse --short HEAD)
-DOCKERTAG ?= latest
 GITSHA := $(shell git rev-parse HEAD)
 GITBRANCH := $(shell git rev-parse --abbrev-ref HEAD)
 BUILDUSER := $(shell whoami)@$(shell hostname)
 BUILDDATE := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+.PHONY: release
 
 all: unused lint style test
 
@@ -53,11 +54,11 @@ $(GOLANGCI_LINT):
 	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh \
 		| sh -s -- -b $(GOPATH)/bin $(GOLANGCI_LINT_VERSION)
 
-release: build
-	@tar -czf job-pod-reaper-$(VERSION).$(GOOS)-$(GOARCH).tar.gz job-pod-reaper
-	@echo job-pod-reaper-$(VERSION).$(GOOS)-$(GOARCH).tar.gz
-	@sed -i 's/:latest/:$(DOCKERTAG)/g' install/deployment.yaml
-	@sed -i 's/:latest/:$(DOCKERTAG)/g' install/ondemand-deployment.yaml
+release:
+	@mkdir -p release
+	@sed 's/:latest/:$(VERSION)/g' install/deployment.yaml > release/deployment.yaml
+	@sed 's/:latest/:$(VERSION)/g' install/ondemand-deployment.yaml > release/ondemand-deployment.yaml
+	@cp install/namespace-rbac.yaml release/namespace-rbac.yaml
 
 release-notes:
 	@bash -c 'while IFS= read -r line; do if [[ "$$line" == "## "* && "$$line" != "## $(VERSION) "* ]]; then break ; fi; echo "$$line"; done < "CHANGELOG.md"' \

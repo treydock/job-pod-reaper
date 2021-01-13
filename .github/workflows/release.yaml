@@ -15,87 +15,38 @@ jobs:
         run: echo ::set-output name=version::${GITHUB_REF#refs/*/}
     outputs:
       version: ${{ steps.version.outputs.version }}
-  build-release:
-    needs: set-output
-    name: Build Release
+  release:
+    needs: [set-output]
     runs-on: ubuntu-latest
+    name: Create Release
     steps:
-      - uses: actions/checkout@v2
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
       - name: Setup Go
         uses: actions/setup-go@v2
         with:
           go-version: '1.15'
-      - name: Package
-        id: package
+      - uses: actions/cache@v2
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+      - uses: creekorful/goreportcard-action@v1.0
+      - name: Make Release
         env:
           VERSION: ${{ needs.set-output.outputs.version }}
-          DOCKERTAG: ${{ needs.set-output.outputs.version }}
-        run: echo "::set-output name=package::$(make release | grep tar.gz)"
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v2
+        run: |
+          rm -rf release
+          make release
+          make release-notes > release/release-notes.out
+          cat release/release-notes.out
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v2
         with:
-          name: package
-          path: |
-            ${{ steps.package.outputs.package }}
-            install/*.yaml
-    outputs:
-      package: ${{ steps.package.outputs.package }}
-  release:
-    needs: [set-output, build-release]
-    runs-on: ubuntu-latest
-    name: Create Release
-    steps:
-      - uses: actions/checkout@v2
-      - name: Download package
-        uses: actions/download-artifact@v2
-        with:
-          name: package
-      - name: Make Release Notes
-        run: make release-notes VERSION=${{ needs.set-output.outputs.version }} > release-notes.md
-      - name: Create Release ${{ needs.set-output.outputs.version }}
-        id: create_release
-        uses: actions/create-release@v1
+          version: latest
+          args: release --rm-dist --debug --release-notes=release/release-notes.out
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ needs.set-output.outputs.version }}
-          release_name: Release ${{ needs.set-output.outputs.version }}
-          body_path: release-notes.md
-          draft: true
-          prerelease: ${{ contains(needs.set-output.outputs.version, 'rc') }}
-      - name: Upload package
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./${{ needs.build-release.outputs.package }}
-          asset_name: ${{ needs.build-release.outputs.package }}
-          asset_content_type: application/gzip
-      - name: Upload namespace-rbac
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./install/namespace-rbac.yaml
-          asset_name: namespace-rbac.yaml
-          asset_content_type: text/x-yaml
-      - name: Upload deployment
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./install/deployment.yaml
-          asset_name: deployment.yaml
-          asset_content_type: text/x-yaml
-      - name: Upload ondemand-deployment
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./install/ondemand-deployment.yaml
-          asset_name: ondemand-deployment.yaml
-          asset_content_type: text/x-yaml
