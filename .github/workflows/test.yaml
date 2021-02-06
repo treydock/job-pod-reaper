@@ -84,7 +84,26 @@ jobs:
       - name: Run chart-testing (lint)
         run: ct lint --config .github/config/cf.yaml
       - name: Create kind cluster
-        uses: helm/kind-action@v1.0.0
+        uses: container-tools/kind-action@v1
         if: steps.list-changed.outputs.changed == 'true'
+      - name: Build
+        uses: docker/build-push-action@v2
+        if: steps.list-changed.outputs.changed == 'true'
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: kind-registry:5000/job-pod-reaper:latest
+          build-args: |
+            VERSION=latest
+      - name: Update chart values
+        if: steps.list-changed.outputs.changed == 'true'
+        run: |
+          sed -i \
+            -e 's|tag: .*|tag: latest|g' \
+            -e 's|repository: .*|repository: kind-registry:5000/job-pod-reaper|g' \
+            charts/job-pod-reaper/values.yaml
+          cat charts/job-pod-reaper/values.yaml
       - name: Run chart-testing (install)
         run: ct install --config .github/config/cf.yaml
+        if: steps.list-changed.outputs.changed == 'true'
