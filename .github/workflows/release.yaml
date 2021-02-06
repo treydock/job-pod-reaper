@@ -28,6 +28,10 @@ jobs:
         uses: actions/setup-go@v2
         with:
           go-version: '1.15'
+      - name: Install Helm
+        uses: azure/setup-helm@v1
+        with:
+          version: v3.5.0
       - uses: actions/cache@v2
         with:
           path: ~/go/pkg/mod
@@ -50,3 +54,7 @@ jobs:
           args: release --rm-dist --debug --release-notes=release/release-notes.out
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish Helm charts
+        uses: stefanprodan/helm-gh-pages@master
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}

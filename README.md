@@ -7,7 +7,7 @@
 
 # job-pod-reaper
 
-Kubernetes service that can reap pods that have run past their lifetime, or pods that have been evicted.
+Kubernetes service that can reap pods that have run past their lifetime.
 
 This reaping is intended to be run against pods that act like short lived jobs.  Additional resources with the same `job` label as the expired pod will also be reaped.
 
@@ -26,6 +26,29 @@ Currently this code is built and tested against Kubernetes 1.19.
 
 ## Install
 
+### Install with Helm
+
+Only Helm >= 3.2.0 is supported.
+
+```
+helm repo add job-pod-reaper https://osc.github.io/job-pod-reaper
+helm install job-pod-reaper job-pod-reaper/job-pod-reaper -n job-pod-reaper --create-namespace
+```
+
+For Open OnDemand the following adjustments can be made to get a working install using Helm:
+
+```
+helm install job-pod-reaper job-pod-reaper/job-pod-reaper \
+-n job-pod-reaper --create-namespace \
+--set config.reapNamespaces=false \
+--set config.namespaceLabels='app.kubernetes.io/name=open-ondemand' \
+--set config.podsLabels='app.kubernetes.io/managed-by=open-ondemand'
+```
+
+See [Cluster Role Bindings](#cluster-role-bindings) for information on necessary RoleBinding needed to allow job-pod-reaper to reap OnDemand pods if not reaping all namespaces.
+
+### Install with YAML
+
 First install the necessary Namespace and RBAC resources:
 
 ```
@@ -43,6 +66,8 @@ A more generic deployment:
 ```
 kubectl apply -f https://github.com/OSC/job-pod-reaper/releases/latest/download/deployment.yaml
 ```
+
+### Cluster Role Bindings
 
 If you wish to authorize the job-pod-reaper to reap only specific namespaces, those namespaces will need to have the following RoleBinding added (replace `$NAMESPACE` with namespace name). Use this `RoleBinding` on namespaces listed with `--reap-namespaces` or if those namespaces match labels defined with `--namespace-labels`
 

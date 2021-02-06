@@ -10,4 +10,3 @@ RUN apk --no-cache add ca-certificates
 WORKDIR /
 COPY --from=builder /go/src/app/job-pod-reaper .
 USER 65534
-ENTRYPOINT ["/job-pod-reaper"]

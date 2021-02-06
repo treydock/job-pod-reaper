@@ -23,6 +23,7 @@ spec:
         image: docker.io/ohiosupercomputer/job-pod-reaper:latest
         imagePullPolicy: Always
         args:
+        - /job-pod-reaper
         - --reap-max=30
         - --reap-interval=60s
         - --namespace-labels=app.kubernetes.io/name=open-ondemand
