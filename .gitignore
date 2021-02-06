@@ -1,4 +1,4 @@
-job-pod-reaper
+/job-pod-reaper
 /coverage.txt
 *.tar.gz
 /dist

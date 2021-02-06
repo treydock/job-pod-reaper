@@ -169,6 +169,15 @@ func main() {
 	level.Info(logger).Log("msg", fmt.Sprintf("Starting %s", appName), "version", version.Info())
 	level.Info(logger).Log("msg", "Build context", "build_context", version.BuildContext())
 
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`<html>
+	             <head><title>job-pod-reaper</title></head>
+	             <body>
+	             <h1>job-pod-reaper</h1>
+	             <p><a href='/metrics'>Metrics</a></p>
+	             </body>
+	             </html>`))
+	})
 	http.Handle(metricsPath, promhttp.HandlerFor(metricGathers(), promhttp.HandlerOpts{}))
 
 	go func() {

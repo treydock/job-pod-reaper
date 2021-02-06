@@ -1,0 +1,83 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "job-pod-reaper.fullname" . }}
+  labels:
+    {{- include "job-pod-reaper.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "job-pod-reaper.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "job-pod-reaper.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "job-pod-reaper.serviceAccountName" . }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+          {{- if .Values.config.reapMax }}
+            - --reap-max={{ .Values.config.reapMax }}
+          {{- end }}
+          {{- if .Values.config.reapInterval }}
+            - --reap-interval={{ .Values.config.reapInterval }}
+          {{- end }}
+          {{- if .Values.config.reapNamespaces }}
+            - --reap-namespaces={{ .Values.config.reapNamespaces }}
+          {{- end }}
+          {{- if .Values.config.namespaceLabels }}
+            - --namespace-labels={{ .Values.config.namespaceLabels }}
+          {{- end }}
+          {{- if .Values.config.podsLabels }}
+            - --pods-labels={{ .Values.config.podsLabels }}
+          {{- end }}
+          {{- if .Values.config.jobLabel }}
+            - --job-label={{ .Values.config.jobLabel }}
+          {{- end }}
+            - --listen-address=:{{ .Values.config.httpPort | default 8080 }}
+          {{- with .Values.extraArgs }}
+          {{ toYaml . | indent 12 }}
+          {{- end }}
+          ports:
+            - containerPort: {{ .Values.config.httpPort | default 8080 }}
+              name: http
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
