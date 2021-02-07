@@ -1,0 +1,53 @@
+name: Release Docker
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - '*'
+
+jobs:
+  release-docker:
+    runs-on: ubuntu-latest
+    name: Release Docker
+    steps:
+      - name: Set version
+        id: version
+        run: echo ::set-output name=version::${GITHUB_REF#refs/*/}
+      - uses: actions/checkout@v2
+      - uses: docker/setup-qemu-action@v1
+      - uses: docker/setup-buildx-action@v1
+      - name: Login to DockerHub
+        uses: docker/login-action@v1 
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
+      - name: Build and push latest
+        if: ${{ github.ref == 'refs/heads/main' }}
+        id: docker_build_latest
+        uses: docker/build-push-action@v2
+        with:
+          context: ./
+          file: ./Dockerfile
+          push: true
+          tags: ohiosupercomputer/job-pod-reaper:latest
+          build-args: |
+            VERSION=main
+      - name: Build and push version ${{ steps.version.outputs.version }}
+        if: ${{ github.ref != 'refs/heads/main' }}
+        id: docker_build_version
+        uses: docker/build-push-action@v2
+        with:
+          context: ./
+          file: ./Dockerfile
+          push: true
+          tags: ohiosupercomputer/job-pod-reaper:${{ steps.version.outputs.version }}
+          build-args: |
+            VERSION=${{ steps.version.outputs.version }}
+      - name: Image digest
+        if: steps.docker_build_latest.outputs.digest
+        run: echo ${{ steps.docker_build_latest.outputs.digest }}
+      - name: Image digest
+        if: steps.docker_build_version.outputs.digest
+        run: echo ${{ steps.docker_build_version.outputs.digest }}

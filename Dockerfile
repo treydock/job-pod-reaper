@@ -1,7 +1,9 @@
-FROM golang:1.15 AS builder
+FROM golang:1.15-alpine AS builder
+RUN apk update && apk add git make
 WORKDIR /go/src/app
-COPY ["main.go","go.mod","go.sum","Makefile","./"]
-RUN make build
+COPY . ./
+ARG VERSION="main"
+RUN make build VERSION=${VERSION}
 
 FROM alpine:3.12
 RUN apk --no-cache add ca-certificates

@@ -1,0 +1,74 @@
+# Default values for job-pod-reaper.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+# See README for descriptions of config options and available arguments
+config:
+  reapMax: 30
+  reapInterval: 60s
+  reapNamespaces: all
+  # For OnDemand, also can comment out reapNamespaces
+  # namespaceLabels: app.kubernetes.io/name=open-ondemand
+  # podsLabels: app.kubernetes.io/managed-by=open-ondemand
+  jobLabel: job
+  httpPort: 8080
+extraArgs: []
+
+image:
+  repository: docker.io/ohiosupercomputer/job-pod-reaper
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: "v0.1.0"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+rbac:
+  create: true
+
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+podAnnotations: {}
+
+podSecurityContext: {}
+  # fsGroup: 2000
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+    - all
+  privileged: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 65534
+
+service:
+  type: ClusterIP
+  port: 8080
+  annotations:
+    prometheus.io/scrape: 'true'
+    prometheus.io/path: /metrics
+    prometheus.io/port: '8080'
+
+resources:
+  limits:
+    memory: 128Mi
+  requests:
+    cpu: 100m
+    memory: 50Mi
+
+nodeSelector:
+  kubernetes.io/os: linux
+
+tolerations: []
+
+affinity: {}

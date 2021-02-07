@@ -4,30 +4,36 @@ kind: Deployment
 metadata:
   name: ondemand-job-pod-reaper
   namespace: job-pod-reaper
+  labels:
+    app.kubernetes.io/name: job-pod-reaper
+    app.kubernetes.io/instance: ondemand-job-pod-reaper
 spec:
   selector:
     matchLabels:
-      app: ondemand-job-pod-reaper
+      app.kubernetes.io/instance: ondemand-job-pod-reaper
   template:
     metadata:
       labels:
-        app: ondemand-job-pod-reaper
+        app.kubernetes.io/name: job-pod-reaper
+        app.kubernetes.io/instance: ondemand-job-pod-reaper
     spec:
       serviceAccountName: job-pod-reaper
       containers:
       - name: ondemand-job-pod-reaper
-        image: docker.io/ohiosupercomputer/job-pod-reaper:v0.1.0
+        image: docker.io/ohiosupercomputer/job-pod-reaper:latest
         imagePullPolicy: Always
         args:
         - --reap-max=30
-        - --reap-evicted-pods
         - --reap-interval=60s
-        - --reap-timestamp=start
         - --namespace-labels=app.kubernetes.io/name=open-ondemand
         - --pods-labels=app.kubernetes.io/managed-by=open-ondemand
         - --job-label=job
-        - --log-level=debug
+        - --listen-address=:8080
+        - --log-level=info
         - --log-format=logfmt
+        ports:
+        - containerPort: 8080
+          name: metrics
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:
@@ -45,3 +51,24 @@ spec:
             memory: 50Mi
       nodeSelector:
         kubernetes.io/os: linux
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ondemand-job-pod-reaper
+  namespace: job-pod-reaper
+  labels:
+    app.kubernetes.io/name: job-pod-reaper
+    app.kubernetes.io/instance: ondemand-job-pod-reaper
+  annotations:
+    prometheus.io/scrape: 'true'
+    prometheus.io/path: /metrics
+    prometheus.io/port: '8080'
+spec:
+  type: ClusterIP
+  ports:
+  - name: metrics
+    port: 8080
+    targetPort: metrics
+  selector:
+    app.kubernetes.io/instance: ondemand-job-pod-reaper
